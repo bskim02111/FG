@@ -1080,7 +1080,12 @@ async function linkDrop(quiet = false) {
   try { await port.close(); } catch (e) {}
   if (quiet) return;
   onLora(['disc', LK.name]);
-  if (!LK.yielded) setTimeout(linkAuto, 3000);
+  if (!LK.yielded) setTimeout(linkAutoVisible, 3000);
+}
+/* 자동 연결은 이 탭이 화면에 보일 때만 — 뒤에 숨어 있는(잊고 있던) 시뮬레이터 탭이 VS Code 송신 프로그램이나 다른 탭의 포트를 뺏지 않게 */
+function linkAutoVisible() {
+  if (LK.mode !== 'serial' || LK.yielded || LK.port) return;
+  if (document.visibilityState === 'visible') linkAuto(); else LK.waitVisible = true;
 }
 /* ── 탭이 여러 개일 때: 송신 보드 포트는 한 탭만 쓸 수 있음 (발표자료에서 Yes를 누를 때마다 새 탭이 열림)
    → 새로 열린 탭(또는 사용자가 버튼을 누른 탭)이 '내가 쓸게'를 알리면 다른 탭은 포트를 놓고 물러남 */
@@ -1097,9 +1102,14 @@ async function linkYield() {
   if (had) log('다른 탭에서 시뮬레이터를 열어 LoRa 송신 보드 연결을 그 탭으로 넘김 (이 탭은 송신하지 않음)', 'man');
   loraRefresh();
 }
-/* 포트가 다른 프로그램(파이썬 시뮬레이터 · 시리얼 모니터)에 잡혀 있으면 2초마다 다시 시도 → 그 프로그램을 끄면 바로 연결 */
+/* 포트가 다른 곳에 잡혀 있으면 이 탭이 보이는 동안 20초까지만 2초마다 다시 시도 (그 사이 닫으면 바로 연결).
+   그 뒤에는 멈춤 → 다른 프로그램을 닫고 'USB 연결'이나 '시뮬레이션 시작'을 누르면 다시 시도 (계속 시도하면 VS Code 송신 프로그램이 포트를 못 잡음) */
 function linkBusyRetry() {
   clearTimeout(LK.busyTimer);
+  if (document.visibilityState !== 'visible' || nowS() - LK.busySince > 20) {
+    if (!LK.warned.has('busystop')) { LK.warned.add('busystop'); log('송신 보드 포트 자동 재시도를 멈춤 — 포트를 쓰는 프로그램을 닫은 뒤 위쪽 \'USB 연결\'을 누르세요', 'man'); }
+    return;
+  }
   LK.busyTimer = setTimeout(() => { if (!LK.port && !LK.yielded) linkAuto(); }, 2000);
 }
 /* 한 번 허락한 포트는 Chrome이 기억 → 페이지를 열 때 · 보드를 다시 꽂을 때 자동으로 찾아 연결 */
@@ -1113,11 +1123,14 @@ async function linkAuto() {
   let busy = false;
   try { for (const p of ports) { if (LK.port || LK.yielded) break; const r = await linkProbe(p); if (r === 'tx') break; if (r === 'busy') busy = true; } }
   finally { LK.probing = false; }
+  const wasBusy = LK.busy;
   LK.busy = busy && !LK.port;
+  if (LK.busy && !wasBusy) LK.busySince = nowS();
+  if (!LK.busy) LK.warned.delete('busystop');
   if (LK.busy && !LK.warned.has('busy') && nowS() - LK.initT > 6) {      // 처음 몇 초는 예전 탭이 포트를 놓는 중일 수 있어 조용히 재시도
     LK.warned.add('busy');
-    log('송신 보드 포트를 다른 곳에서 쓰는 중 — 파이썬 시뮬레이터 · 아두이노 IDE 시리얼 모니터를 닫으면 자동으로 연결됨', 'urg');
-    toast('LoRa 포트 사용 중', '파이썬 시뮬레이터 · 시리얼 모니터를 닫으면 자동으로 연결돼요', COL.warn);
+    log('송신 보드 포트를 다른 곳에서 쓰는 중 — 다른 Chrome 탭(예전 시뮬레이터 · 다른 창 포함) · VS Code 송신 프로그램 · 아두이노 IDE 시리얼 모니터 중 하나를 닫으면 연결됨', 'urg');
+    toast('LoRa 포트 사용 중', '다른 Chrome 탭(예전 시뮬레이터 · 다른 창 포함) · VS Code 송신 프로그램 · 아두이노 IDE 시리얼 모니터 를 닫아 주세요', COL.warn);
   }
   if (LK.busy) linkBusyRetry();
   loraRefresh();
@@ -1137,7 +1150,7 @@ async function linkPick() {
   LK.rx.delete(port); LK.probing = true; loraRefresh();
   let r;
   try { r = await linkProbe(port); } finally { LK.probing = false; loraRefresh(); }
-  if (r === 'busy') { LK.busy = true; linkBusyRetry(); loraRefresh(); toast('포트를 열 수 없어요', '아두이노 IDE 시리얼 모니터나 파이썬 시뮬레이터가 이 포트를 쓰고 있으면 닫아 주세요 (닫으면 자동 연결)', COL.bad); }
+  if (r === 'busy') { LK.busy = true; LK.busySince = nowS(); LK.warned.delete('busystop'); linkBusyRetry(); loraRefresh(); toast('포트를 열 수 없어요 (다른 곳에서 사용 중)', '다른 Chrome 탭(예전 시뮬레이터 · 다른 창 포함) · VS Code 송신 프로그램 · 아두이노 IDE 시리얼 모니터 를 닫아 주세요 (20초 안에 닫으면 자동 연결)', COL.bad); }
   else if (r === 'rx') toast('수신 보드가 선택됐어요', 'lora_tx.ino 를 올린 송신 보드의 포트를 골라 주세요', COL.warn);
   else if (r === 'none') toast('송신 보드 응답 없음', 'lora_tx.ino 가 올라간 보드인지 확인하고 다시 연결해 주세요', COL.warn);
 }
@@ -1147,6 +1160,9 @@ async function linkPick() {
 function loraOnStart() {
   if (LK.mode !== 'serial') return;
   if (LK.yielded) { linkClaim(); setTimeout(linkAuto, 800); return; }      // 이 탭에서 시작 → 연결을 이 탭으로 가져옴
+  if (LK.busy && !LK.port && !LK.probing) {                           // 포트가 잡혀 있던 상태 → 다시 한 번 가져와 봄 (예전 탭에는 양보 요청)
+    linkClaim(); LK.busySince = nowS(); LK.warned.delete('busystop'); setTimeout(linkAuto, 800); return;
+  }
   if (LK.port || LK.probing || LK.busy || LK.askedOnStart) return;
   LK.askedOnStart = true;
   log('송신 아두이노가 아직 연결되지 않아 포트 선택 창을 띄움 — 송신 보드를 고르면 시뮬레이션 중에도 바로 연결됨', 'info');
@@ -1364,7 +1380,7 @@ function loraRefresh() {
   } else if (LK.yielded) {
     c = COL.muted; t = 'LoRa · 다른 탭에서 연결 중 (이 탭은 송신 안 함)';
   } else if (!LK.port && LK.busy) {
-    c = COL.bad; t = 'LoRa 포트 사용 중 · 다른 프로그램 닫으면 자동 연결';
+    c = COL.bad; t = 'LoRa 포트 사용 중 · 다른 탭/프로그램 닫고 USB 연결';
   } else if (!LK.port) {
     c = COL.muted; t = LK.probing ? 'LoRa 송신기 찾는 중…' : 'LoRa 송신기 미연결';
   } else if (LK.stage === 'init') { c = COL.warn; t = `LoRa ${port} · 모듈 설정 중…`; }
@@ -1397,7 +1413,10 @@ function loraInit() {
   $('loraUsb').addEventListener('click', linkPick);
   $('loraTest').addEventListener('click', loraTest);
   if (LK.mode === 'serial') {
-    navigator.serial.addEventListener('connect', () => { if (!LK.yielded) setTimeout(linkAuto, 300); });
+    navigator.serial.addEventListener('connect', () => { if (!LK.yielded) setTimeout(linkAutoVisible, 300); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && LK.waitVisible) { LK.waitVisible = false; linkAutoVisible(); }
+    });
     navigator.serial.addEventListener('disconnect', e => { const t = e.target; if (t === LK.port) linkDrop(); else LK.rx.delete(t); });
     try {
       LK.bc = new BroadcastChannel('focusguard-lora');
@@ -1406,7 +1425,7 @@ function loraInit() {
     LK.initT = nowS();
     linkClaim();                                                     // 새 탭이 연결을 가져감 → 예전 탭은 포트를 놓음
     window.addEventListener('pagehide', () => { if (LK.port) linkDrop(true); });
-    setTimeout(linkAuto, LK.bc ? 900 : 0);                          // 예전 탭이 포트를 놓을 시간을 조금 줌 (못 놓았으면 2초마다 재시도)
+    setTimeout(linkAutoVisible, LK.bc ? 900 : 0);                   // 예전 탭이 포트를 놓을 시간을 조금 줌 (못 놓았으면 20초까지 2초마다 재시도)
   }
   loraRefresh();
 }
