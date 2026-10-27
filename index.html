@@ -986,12 +986,10 @@ const Plot = (() => {
 const LORA_BAUD = 115200;
 const LK = {
   mode: 'serial',            // serial · nosupport (Safari 등) · blocked (USB 접근이 막힌 화면, 예: claude.ai 미리보기)
-  port: null, writer: null, rbox: null, name: '', ready: false, loraOk: null, threshold: 1000, fw: 1, gotN: null, gotT: null,
+  port: null, writer: null, reader: null, name: '', ready: false, loraOk: null, threshold: 1000, fw: 1, gotN: null, gotT: null,
   probing: false, rx: new WeakSet(),
   stage: 'search', rssi: null, crossed: false, sentN: null, sentT: 0, metrics: [0, 0, 0], nT: 0, crossT: null, warned: new Set(),
   fwBuild: '', cfg: null, readyT: 0, forced: false, retry: 0, link: null, linkRssi: null,   // v3: 보조 송신 · 자동 재송신 · 연결 점검
-  alertDone: false, gTries: 0, gAt: 0, testPending: false, testT: 0, lastTest: false,       // 1,000개 돌파 알림을 테스트 송신과 같은 경로(G)로 확실히 보냄
-  bc: null, tabId: Math.random().toString(36).slice(2), yielded: false, busy: false, busyTimer: 0, initT: 0,   // 탭 여러 개 · 포트 사용 중 처리
 };
 const FW_BUILD = 'FW3.1', LORA_CFG = ['6', '922000000', '9,7,1,12'];   // 송신 보드 코드 판번호 · 모듈 설정 (수신 보드와 같아야 함)
 const nowS = () => performance.now() / 1000;
@@ -1004,113 +1002,56 @@ function portName(port) {
   return USB_NAMES[i.usbVendorId] || `USB ${i.usbVendorId.toString(16).padStart(4, '0')}:${(i.usbProductId || 0).toString(16).padStart(4, '0')}`;
 }
 
-/* ── 포트 열기 · 송신 보드 확인 (파이썬 _probe 와 같은 순서: 열면 우노가 리셋되며 BOOT,TX 를 보냄 → 2.5초 지나도 없으면 ? 로 물어봄)
-   읽기 오류 처리: 선 잡음 · 프레이밍 오류 같은 '가벼운' 오류가 나면 Chrome은 지금 읽기 통로만 끊고 port.readable 에 새 통로를 만든다.
-   예전에는 이걸 '연결 끊김'으로 보고 포트를 닫았다가 다시 열었는데, 그러면 (1) 우노가 리셋되는 순간의 잡음 때문에 연결 자체가 실패하거나
-   (2) 시뮬레이션 중에 송신 보드가 리셋돼 1,000개 알림이 늦거나 빠졌다 → 이제는 끊지 않고 새 통로로 이어서 읽는다.
-   USB가 실제로 빠졌을 때(NetworkError, port.readable 없음)만 연결 끊김으로 처리. */
+/* ── 포트 열기 · 송신 보드 확인 (파이썬 _probe 와 같은 순서: 열면 우노가 리셋되며 BOOT,TX 를 보냄 → 2.5초 지나도 없으면 ? 로 물어봄) */
 async function linkProbe(port) {
   try { await port.open({ baudRate: LORA_BAUD }); }
   catch (e) { return port.readable ? 'open' : 'busy'; }
-  const writer = port.writable.getWriter(), dec = new TextDecoder(), rbox = { reader: null, stop: false };
+  const writer = port.writable.getWriter(), reader = port.readable.getReader(), dec = new TextDecoder();
   let probing = true, done, buf = '';
   const result = new Promise(r => { done = r; });
   const finish = v => { if (probing) { probing = false; done(v); } };
   const askT = setTimeout(() => { writer.write(enc.encode('?\n')).catch(() => {}); }, 2500);
   const killT = setTimeout(() => finish('none'), 4500);
-  const onText = text => {
-    buf += text;
-    let i;
-    while ((i = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
-      if (probing) {
-        const p = line.split(',');
-        if (['BOOT', 'READY', 'INFO'].includes(p[0]) && p.length > 1) {
-          if (p[1] !== 'TX') { finish('rx'); continue; }                 // 수신 보드 등 → 이 포트는 아님
-          Object.assign(LK, { port, writer, rbox, name: portName(port), ready: p[0] !== 'BOOT', gotN: null, gotT: null });
-          finish('tx'); onLora(['conn', LK.name]); linkHandle(line);
-        }
-      } else if (LK.port === port) linkHandle(line);
-    }
-  };
   (async () => {
-    while (!rbox.stop && port.readable) {
-      let reader;
-      try { reader = port.readable.getReader(); } catch (e) { break; }
-      rbox.reader = reader;
-      let ended = false;
-      try {
-        for (;;) {
-          const { value, done: end } = await reader.read();
-          if (end) { ended = true; break; }                              // 우리가 닫음
-          onText(dec.decode(value, { stream: true }));
+    try {
+      for (;;) {
+        const { value, done: end } = await reader.read();
+        if (end) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (probing) {
+            const p = line.split(',');
+            if (['BOOT', 'READY', 'INFO'].includes(p[0]) && p.length > 1) {
+              if (p[1] !== 'TX') { finish('rx'); continue; }               // 수신 보드 등 → 이 포트는 아님
+              Object.assign(LK, { port, writer, reader, name: portName(port), ready: p[0] !== 'BOOT', gotN: null, gotT: null });
+              finish('tx'); onLora(['conn', LK.name]); linkHandle(line);
+            }
+          } else if (LK.port === port) linkHandle(line);
         }
-      } catch (e) {
-        const name = (e && e.name) || 'Error';
-        if (name === 'NetworkError') ended = true;                        // USB가 빠짐 → 연결 끊김
-        else {                                                           // 가벼운 오류 → 새 통로로 계속 읽기
-          LK.serialErrs = (LK.serialErrs || 0) + 1;
-          console.warn('[serial] 읽기 오류 (끊지 않고 계속 읽음)', name);
-          buf += '\n';                                                   // 오류 순간에 반쯤 받은 줄은 버림
-          await new Promise(r => setTimeout(r, 30));
-        }
-      } finally { try { reader.releaseLock(); } catch (e) {} }
-      if (ended) break;
-    }
+      }
+    } catch (e) { /* USB 뽑힘 등 */ }
     finish('none');
     if (LK.port === port) linkDrop();
   })();
   const r = await result; clearTimeout(askT); clearTimeout(killT);
   if (r !== 'tx') {
-    rbox.stop = true;
-    try { await rbox.reader.cancel(); } catch (e) {}
-    try { rbox.reader.releaseLock(); } catch (e) {}
-    try { writer.releaseLock(); } catch (e) {}
+    try { await reader.cancel(); } catch (e) {}
+    try { reader.releaseLock(); writer.releaseLock(); } catch (e) {}
     try { await port.close(); } catch (e) {}
     if (r === 'rx') LK.rx.add(port);
   }
   return r;
 }
-async function linkDrop(quiet = false) {
-  const { port, rbox, writer } = LK;
-  if (!port) return;
-  Object.assign(LK, { port: null, rbox: null, writer: null, ready: false });
-  if (rbox) { rbox.stop = true; try { await rbox.reader.cancel(); } catch (e) {} try { rbox.reader.releaseLock(); } catch (e) {} }
-  try { writer.releaseLock(); } catch (e) {}
+async function linkDrop() {
+  const { port, reader, writer } = LK;
+  Object.assign(LK, { port: null, reader: null, writer: null, ready: false });
+  try { await reader.cancel(); } catch (e) {}
+  try { reader.releaseLock(); writer.releaseLock(); } catch (e) {}
   try { await port.close(); } catch (e) {}
-  if (quiet) return;
   onLora(['disc', LK.name]);
-  if (!LK.yielded) setTimeout(linkAutoVisible, 3000);
-}
-/* 자동 연결은 이 탭이 화면에 보일 때만 — 뒤에 숨어 있는(잊고 있던) 시뮬레이터 탭이 VS Code 송신 프로그램이나 다른 탭의 포트를 뺏지 않게 */
-function linkAutoVisible() {
-  if (LK.mode !== 'serial' || LK.yielded || LK.port) return;
-  if (document.visibilityState === 'visible') linkAuto(); else LK.waitVisible = true;
-}
-/* ── 탭이 여러 개일 때: 송신 보드 포트는 한 탭만 쓸 수 있음 (발표자료에서 Yes를 누를 때마다 새 탭이 열림)
-   → 새로 열린 탭(또는 사용자가 버튼을 누른 탭)이 '내가 쓸게'를 알리면 다른 탭은 포트를 놓고 물러남 */
-function linkClaim() {
-  LK.yielded = false;
-  try { LK.bc && LK.bc.postMessage({ t: 'claim', id: LK.tabId }); } catch (e) {}
-}
-async function linkYield() {
-  if (LK.yielded) return;
-  LK.yielded = true; LK.busy = false; clearTimeout(LK.busyTimer);
-  const had = !!LK.port;
-  await linkDrop(true);
-  LK.stage = 'search';
-  if (had) log('다른 탭에서 시뮬레이터를 열어 LoRa 송신 보드 연결을 그 탭으로 넘김 (이 탭은 송신하지 않음)', 'man');
-  loraRefresh();
-}
-/* 포트가 다른 곳에 잡혀 있으면 이 탭이 보이는 동안 20초까지만 2초마다 다시 시도 (그 사이 닫으면 바로 연결).
-   그 뒤에는 멈춤 → 다른 프로그램을 닫고 'USB 연결'이나 '시뮬레이션 시작'을 누르면 다시 시도 (계속 시도하면 VS Code 송신 프로그램이 포트를 못 잡음) */
-function linkBusyRetry() {
-  clearTimeout(LK.busyTimer);
-  if (document.visibilityState !== 'visible' || nowS() - LK.busySince > 20) {
-    if (!LK.warned.has('busystop')) { LK.warned.add('busystop'); log('송신 보드 포트 자동 재시도를 멈춤 — 포트를 쓰는 프로그램을 닫은 뒤 위쪽 \'USB 연결\'을 누르세요', 'man'); }
-    return;
-  }
-  LK.busyTimer = setTimeout(() => { if (!LK.port && !LK.yielded) linkAuto(); }, 2000);
+  setTimeout(linkAuto, 3000);
 }
 /* 한 번 허락한 포트는 Chrome이 기억 → 페이지를 열 때 · 보드를 다시 꽂을 때 자동으로 찾아 연결 */
 async function linkAuto() {
@@ -1120,24 +1061,11 @@ async function linkAuto() {
   ports = ports.filter(p => !LK.rx.has(p));
   if (!ports.length) return;
   LK.probing = true; loraRefresh();
-  let busy = false;
-  try { for (const p of ports) { if (LK.port || LK.yielded) break; const r = await linkProbe(p); if (r === 'tx') break; if (r === 'busy') busy = true; } }
-  finally { LK.probing = false; }
-  const wasBusy = LK.busy;
-  LK.busy = busy && !LK.port;
-  if (LK.busy && !wasBusy) LK.busySince = nowS();
-  if (!LK.busy) LK.warned.delete('busystop');
-  if (LK.busy && !LK.warned.has('busy') && nowS() - LK.initT > 6) {      // 처음 몇 초는 예전 탭이 포트를 놓는 중일 수 있어 조용히 재시도
-    LK.warned.add('busy');
-    log('송신 보드 포트를 다른 곳에서 쓰는 중 — 다른 Chrome 탭(예전 시뮬레이터 · 다른 창 포함) · VS Code 송신 프로그램 · 아두이노 IDE 시리얼 모니터 중 하나를 닫으면 연결됨', 'urg');
-    toast('LoRa 포트 사용 중', '다른 Chrome 탭(예전 시뮬레이터 · 다른 창 포함) · VS Code 송신 프로그램 · 아두이노 IDE 시리얼 모니터 를 닫아 주세요', COL.warn);
-  }
-  if (LK.busy) linkBusyRetry();
-  loraRefresh();
+  try { for (const p of ports) if (!LK.port && await linkProbe(p) === 'tx') break; }
+  finally { LK.probing = false; loraRefresh(); }
 }
 /* 'USB 연결' — 처음 한 번 포트 고르기 */
 async function linkPick() {
-  if (LK.yielded) { linkClaim(); setTimeout(linkAuto, 800); return; }      // 다른 탭에 넘겼던 연결을 다시 가져옴
   if (LK.mode === 'nosupport') { toast('USB 연결을 지원하지 않는 브라우저', '컴퓨터용 Chrome 또는 Edge에서 열어 주세요', COL.warn); return; }
   if (LK.mode === 'blocked') { toast('이 화면에서는 USB를 쓸 수 없어요', 'LoRa 송신은 Chrome에서 bskim02111.github.io/FG 로 열어 주세요', COL.warn); return; }
   if (LK.port || LK.probing) return;
@@ -1150,7 +1078,7 @@ async function linkPick() {
   LK.rx.delete(port); LK.probing = true; loraRefresh();
   let r;
   try { r = await linkProbe(port); } finally { LK.probing = false; loraRefresh(); }
-  if (r === 'busy') { LK.busy = true; LK.busySince = nowS(); LK.warned.delete('busystop'); linkBusyRetry(); loraRefresh(); toast('포트를 열 수 없어요 (다른 곳에서 사용 중)', '다른 Chrome 탭(예전 시뮬레이터 · 다른 창 포함) · VS Code 송신 프로그램 · 아두이노 IDE 시리얼 모니터 를 닫아 주세요 (20초 안에 닫으면 자동 연결)', COL.bad); }
+  if (r === 'busy') toast('포트를 열 수 없어요', '아두이노 IDE 시리얼 모니터나 파이썬 시뮬레이터가 이 포트를 쓰고 있으면 닫아 주세요', COL.bad);
   else if (r === 'rx') toast('수신 보드가 선택됐어요', 'lora_tx.ino 를 올린 송신 보드의 포트를 골라 주세요', COL.warn);
   else if (r === 'none') toast('송신 보드 응답 없음', 'lora_tx.ino 가 올라간 보드인지 확인하고 다시 연결해 주세요', COL.warn);
 }
@@ -1158,12 +1086,7 @@ async function linkPick() {
 /* 시뮬레이션 시작을 눌렀는데 송신 보드가 아직 연결 안 돼 있으면 → 그 클릭으로 바로 Chrome 포트 선택 창을 띄움 (페이지마다 한 번)
    한 번 고른 포트는 Chrome이 기억해서 다음부터는 페이지를 열면 자동 연결 → 시뮬레이션 시작만 누르면 됨 */
 function loraOnStart() {
-  if (LK.mode !== 'serial') return;
-  if (LK.yielded) { linkClaim(); setTimeout(linkAuto, 800); return; }      // 이 탭에서 시작 → 연결을 이 탭으로 가져옴
-  if (LK.busy && !LK.port && !LK.probing) {                           // 포트가 잡혀 있던 상태 → 다시 한 번 가져와 봄 (예전 탭에는 양보 요청)
-    linkClaim(); LK.busySince = nowS(); LK.warned.delete('busystop'); setTimeout(linkAuto, 800); return;
-  }
-  if (LK.port || LK.probing || LK.busy || LK.askedOnStart) return;
+  if (LK.mode !== 'serial' || LK.port || LK.probing || LK.askedOnStart) return;
   LK.askedOnStart = true;
   log('송신 아두이노가 아직 연결되지 않아 포트 선택 창을 띄움 — 송신 보드를 고르면 시뮬레이션 중에도 바로 연결됨', 'info');
   linkPick();                                                        // 클릭 처리 안에서 바로 호출해야 Chrome이 선택 창을 허용함
@@ -1230,15 +1153,10 @@ function loraSync(force = false) {
     if (!LK.ready) log(`학습 샘플 ${fmt0(n)}개 ≥ ${fmt0(LK.threshold)} — 송신 아두이노가 연결되지 않아 LoRa 알림을 보내지 못함 `
       + '(상단 LoRa 표시의 \'USB 연결\'로 송신 보드 연결, 아두이노 IDE 시리얼 모니터가 포트를 잡고 있으면 닫기)', 'urg');
   }
-  // 1,000개를 넘는 순간: 최신 상태 줄 + 'G'(지금 알림 보내기)를 바로 보냄 — 테스트 송신(F)과 같은 경로라
-  // 보드가 상태 줄을 놓쳤거나, 앞서 테스트 송신을 했거나, 보드가 늦게 연결돼도 알림이 반드시 나감.
-  // 보드는 알림을 보내는 중(확인 대기)에는 G를 무시하므로 보드 스스로 보낸 알림과 겹쳐 두 번 가지 않음.
-  // 송신(SENT)이 5초 안에 안 보이면 두 번까지 다시 요청.
-  if (LK.testPending && now - LK.testT > 3) LK.testPending = false;   // 보드가 테스트 송신을 무시한 경우 (다른 알림 송신 중)
-  if (LK.crossed && LK.ready && LK.loraOk && !LK.alertDone && LK.gTries < 3 && (!LK.gTries || now - LK.gAt > 5)) {
-    LK.gTries++; LK.gAt = now;
-    loraForce(LK.gTries === 1 ? `학습 샘플 ${fmt0(n)}개 ≥ ${fmt0(LK.threshold)} → 송신 아두이노에 알림 송신 요청` : `알림 송신이 확인되지 않아 다시 요청 (${LK.gTries}번째)`);
-  }
+  // 보조 송신: 기준을 넘었는데 4초 안에 보드가 스스로 송신(SENT)하지 않으면 웹이 대신 송신 명령(G)을 보냄
+  // (보드가 상태 줄을 놓쳤거나 '이미 보냄' 상태로 남아 있어도 시연 중 알림이 반드시 나가게 함)
+  if (LK.crossT && LK.ready && LK.loraOk && !LK.forced && !['sending', 'acked', 'noack'].includes(LK.stage)
+      && now - Math.max(LK.crossT, LK.readyT) > 4.0) loraForce('보드가 자동 송신을 안 해서 웹이 대신 송신 요청');
   const got = LK.gotN == null ? '없음' : fmt0(LK.gotN);
   // 진단 ① 상태 줄을 보내는데 송신 보드의 확인(GOT)이 3.5초 넘게 없으면 경고 (V2 보드만 GOT를 보냄)
   const unanswered = LK.gotT == null || LK.gotT < LK.nT;
@@ -1246,8 +1164,8 @@ function loraSync(force = false) {
     LK.warned.add('got');
     log(`송신 보드가 시뮬레이션 상태를 못 받고 있음 (보낸 값 ${fmt0(LK.sentN)}, 보드 확인 ${got}) — USB 케이블을 다시 꽂거나 페이지를 새로 고침`, 'urg');
   }
-  // 진단 ② 기준을 넘었는데 (송신 요청을 세 번 보낸 뒤에도) 송신(SENT)이 없으면 경고
-  if (LK.crossT && LK.ready && LK.gTries >= 3 && now - LK.gAt > 5 && !LK.alertDone && !LK.warned.has('nosend')) {
+  // 진단 ② 기준을 넘었는데 (보조 송신 요청 뒤에도) 송신(SENT)이 없으면 경고
+  if (LK.crossT && LK.ready && now - Math.max(LK.crossT, LK.readyT) > 8.0 && !LK.warned.has('nosend') && !['sending', 'acked', 'noack'].includes(LK.stage)) {
     LK.warned.add('nosend');
     log(`학습 샘플이 ${fmt0(LK.threshold)}개를 넘었는데 송신 보드가 송신하지 않음 (보드 확인 값 ${got}) — 송신 보드에 최신 lora_tx.ino 가 올라갔는지 확인 후 '테스트 송신'으로 무선부터 점검`, 'urg');
     toast('송신 보드가 송신하지 않음', 'lora_tx.ino 다시 업로드 · 상단 \'테스트 송신\'으로 점검', COL.bad);
@@ -1259,10 +1177,10 @@ function loraForce(reason) {
   LK.forced = true;
   if (S.pl) {
     const m = loraMetrics();
-    for (let k = 0; k < 2; k++) linkSendStatus(S.pl.nSamples(), S.pl.records.length, S.pl.cur.no, S.steps * DT, ...m);   // 두 번: 보드가 한 줄을 놓쳐도 알림 내용이 최신
+    linkSendStatus(S.pl.nSamples(), S.pl.records.length, S.pl.cur.no, S.steps * DT, ...m);
     LK.metrics = m;
   }
-  if (linkSend('G')) log(`LoRa ${reason}`, 'info');
+  if (linkSend('G')) log(`LoRa ${reason}`, 'man');
 }
 /* USB를 쓸 수 없는 화면 — 기준 도달과 알림 내용만 표시 */
 function loraOffline(n) {
@@ -1283,10 +1201,7 @@ function onLora(m) {
     const [, ok, fw] = m;
     LK.stage = ok ? 'ready' : 'fail';
     if (ok) log(`LoRa 송신 준비 완료 (${LK.name}) — 학습 샘플 ${fmt0(LK.threshold)}개 넘으면 자동 송신`, 'ai');
-    else {
-      log(`USB(웹 ↔ 송신 아두이노) 연결은 정상, 그런데 송신 아두이노가 LoRa 모듈 응답을 못 받음 — 모듈 VDD-3.3V · GND · TXD→D2 · RXD←D3(분압) 배선 확인 (점검 코드: Check_module\\lora_check)`, 'urg');
-      toast('LoRa 모듈 응답 없음 (USB 연결은 정상)', '송신 아두이노 ↔ LoRa 모듈 배선 · 전원 확인 — lora_check 코드로 점검', COL.bad);
-    }
+    else log(`송신 아두이노(${LK.name})가 LoRa 모듈 응답을 못 받음 — 3.3V · TXD→D2 · RXD←D3(분압) 배선 확인`, 'urg');
     if (fw < 2) {
       log('송신 보드 코드가 예전 버전 → 알림은 보내지만 예측 수명·오차율은 빠짐. 시뮬레이션을 끄고 lora_tx.ino 를 다시 업로드하세요', 'man');
       toast('송신 보드 코드가 예전 버전', '시뮬레이션을 끄고 lora_tx.ino 다시 업로드', COL.warn);
@@ -1298,7 +1213,7 @@ function onLora(m) {
     }
     linkSend('R');                                                   // 재무장: 지난 실행에서 '이미 보냄' 상태로 남아 있으면 다시 안 보내기 때문
     LK.sentN = null; LK.warned.delete('got');
-    Object.assign(LK, { readyT: nowS(), forced: false, retry: 0, link: null, gTries: 0, gAt: 0, testPending: false });   // 보드가 새로 켜짐 → 아직 못 보낸 알림이면 다시 요청
+    Object.assign(LK, { readyT: nowS(), forced: false, retry: 0, link: null });
     loraSync(true);                                                  // 아두이노가 리셋됐으니 현재 상태를 바로 다시 알려줌
   } else if (kind === 'disc') {
     LK.stage = 'search';
@@ -1307,12 +1222,6 @@ function onLora(m) {
     const [, seq, n, tries] = m;
     LK.stage = 'sending';
     if (tries === 1) {
-      LK.lastTest = LK.testPending; LK.testPending = false;
-      if (!LK.lastTest && LK.crossed) LK.alertDone = true;          // 1,000개 돌파 알림이 실제로 나감
-    }
-    if (tries === 1 && LK.lastTest) {
-      log(`LoRa 테스트 송신 #${seq} — 수신측으로 전송 (학습 샘플 ${fmt0(n)}개 시점 값)`, 'data');
-    } else if (tries === 1) {
       const [life, mae, err] = LK.metrics;
       if (LK.fw >= 2) {
         log(`LoRa 송신 #${seq} — 학습 샘플 ${fmt0(n)}개 ≥ ${fmt0(LK.threshold)} → 예측 수명 ${fmt0(life)} h · 오차율 ${fix(err, 1)} % (±${fmt0(mae)} h) 수신측으로 전송`, 'urg');
@@ -1329,7 +1238,7 @@ function onLora(m) {
     toast('LoRa 수신 확인 ✓', `수신측이 알림을 받았습니다 · RSSI ${rssi} dBm · SNR ${snr} dB`, COL.good);
   } else if (kind === 'noack') {
     LK.stage = 'noack';
-    if (LK.retry < 1 && LK.crossed && !LK.lastTest) {               // 1,000개 돌파 알림은 한 번 자동으로 다시 보냄
+    if (LK.retry < 1 && LK.crossed) {                                // 시연 중 한 번은 자동으로 다시 보냄
       LK.retry++;
       log(`LoRa #${m[1]} 수신 확인 없음 → 2초 뒤 자동으로 한 번 더 송신`, 'man');
       setTimeout(() => loraForce('자동 재송신'), 2000);
@@ -1380,14 +1289,10 @@ function loraRefresh() {
   if (LK.mode !== 'serial') {
     if (LK.crossed) { c = COL.accent2; t = `LoRa 알림 기준 도달 · ${fmt0(th)} / ${fmt0(th)}`; }
     else { c = n ? COL.warn : COL.muted; t = `LoRa 알림 · 학습 샘플 ${fmt0(Math.min(n, th))} / ${fmt0(th)}`; }
-  } else if (LK.yielded) {
-    c = COL.muted; t = 'LoRa · 다른 탭에서 연결 중 (이 탭은 송신 안 함)';
-  } else if (!LK.port && LK.busy) {
-    c = COL.bad; t = 'LoRa 포트 사용 중 · 다른 탭/프로그램 닫고 USB 연결';
   } else if (!LK.port) {
     c = COL.muted; t = LK.probing ? 'LoRa 송신기 찾는 중…' : 'LoRa 송신기 미연결';
   } else if (LK.stage === 'init') { c = COL.warn; t = `LoRa ${port} · 모듈 설정 중…`; }
-  else if (LK.stage === 'fail') { c = COL.bad; t = `LoRa ${port} · USB 연결됨 · LoRa 모듈 응답 없음 (배선 확인)`; }
+  else if (LK.stage === 'fail') { c = COL.bad; t = `LoRa ${port} · 모듈 응답 없음`; }
   else if (LK.stage === 'sending') { c = COL.accent2; t = 'LoRa 송신 중 · 수신 확인 대기…'; }
   else if (LK.stage === 'acked') { c = COL.good; t = `LoRa 송신 ✓ 수신 확인 (${LK.rssi} dBm)`; }
   else if (LK.stage === 'noack') { c = COL.bad; t = 'LoRa 송신 · 수신 확인 없음'; }
@@ -1397,13 +1302,11 @@ function loraRefresh() {
   else { c = COL.good; t = `LoRa ${port} · ${LK.link ? '무선 ✓ · ' : ''}보드 수신 ${fmt0(Math.min(LK.gotN, th))} / ${fmt0(th)}`; }
   $('loraDot').style.background = c; $('loraLbl').textContent = t;
   $('loraUsb').hidden = LK.mode !== 'serial' || !!LK.port || LK.probing;
-  $('loraUsb').textContent = LK.yielded ? '이 탭으로 연결' : 'USB 연결';
 }
 
 /* ── 테스트 송신 (파이썬 lora_test: 시뮬레이션과 상관없이 지금 바로 알림 1회) */
 function loraTest() {
-  if (LK.yielded) { linkClaim(); setTimeout(linkAuto, 800); toast('이 탭으로 LoRa 연결을 가져오는 중', '연결되면 테스트 송신을 다시 눌러 주세요', COL.accent2); return; }
-  if (linkSend('F')) { LK.testPending = true; LK.testT = nowS(); log('LoRa 테스트 송신 요청', 'info'); }
+  if (linkSend('F')) log('LoRa 테스트 송신 요청', 'info');
   else if (LK.mode === 'serial') toast('송신 아두이노 미연결', '\'USB 연결\'을 눌러 lora_tx.ino 를 올린 보드를 고르세요', COL.warn);
   else linkPick();
 }
@@ -1416,19 +1319,9 @@ function loraInit() {
   $('loraUsb').addEventListener('click', linkPick);
   $('loraTest').addEventListener('click', loraTest);
   if (LK.mode === 'serial') {
-    navigator.serial.addEventListener('connect', () => { if (!LK.yielded) setTimeout(linkAutoVisible, 300); });
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && LK.waitVisible) { LK.waitVisible = false; linkAutoVisible(); }
-    });
+    navigator.serial.addEventListener('connect', () => setTimeout(linkAuto, 300));
     navigator.serial.addEventListener('disconnect', e => { const t = e.target; if (t === LK.port) linkDrop(); else LK.rx.delete(t); });
-    try {
-      LK.bc = new BroadcastChannel('focusguard-lora');
-      LK.bc.onmessage = e => { const m = e.data || {}; if (m.t === 'claim' && m.id !== LK.tabId) linkYield(); };
-    } catch (e) {}
-    LK.initT = nowS();
-    linkClaim();                                                     // 새 탭이 연결을 가져감 → 예전 탭은 포트를 놓음
-    window.addEventListener('pagehide', () => { if (LK.port) linkDrop(true); });
-    setTimeout(linkAutoVisible, LK.bc ? 900 : 0);                   // 예전 탭이 포트를 놓을 시간을 조금 줌 (못 놓았으면 20초까지 2초마다 재시도)
+    linkAuto();
   }
   loraRefresh();
 }
@@ -1662,22 +1555,12 @@ function simTick() {
   if (S.page === 'collect') refreshPage('collect');
   else if (S.dirty.has(S.page) && performance.now() - S.lastDraw > 1500) refreshPage(S.page);
   refreshFlowbar(); loraSync(); arrows();
-  tickLater(simTick, 350);
+  setTimeout(simTick, 350);
 }
-/* 시뮬레이션 박자 — 발표 중 발표자료 탭으로 넘어가도(탭이 뒤로 가도) Chrome이 느리게 만들지 않도록 작업 스레드(Worker) 타이머 사용 */
-const TICKER = (() => {
-  try {
-    const w = new Worker(URL.createObjectURL(new Blob(['onmessage = e => setTimeout(() => postMessage(e.data), e.data.ms);'], { type: 'text/javascript' })));
-    const cbs = new Map(); let n = 0;
-    w.onmessage = e => { const f = cbs.get(e.data.id); cbs.delete(e.data.id); f && f(); };
-    return (f, ms) => { const id = ++n; cbs.set(id, f); w.postMessage({ id, ms }); };
-  } catch (e) { return null; }
-})();
-function tickLater(f, ms) { if (TICKER) TICKER(f, ms); else setTimeout(f, ms); }
 function toggleSim() {
   S.running = !S.running; S.started = true;
   $('simBtn').innerHTML = S.running ? '⏸&nbsp; 일시정지' : '▶&nbsp; 시뮬레이션 재개';
-  if (S.running) { tickLater(simTick, 10); loraOnStart(); }   // 송신 보드가 아직 연결 안 돼 있으면 이 클릭으로 바로 포트 선택
+  if (S.running) { setTimeout(simTick, 10); loraOnStart(); }   // 송신 보드가 아직 연결 안 돼 있으면 이 클릭으로 바로 포트 선택
   arrows();
 }
 
