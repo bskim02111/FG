@@ -978,7 +978,9 @@ const Plot = (() => {
 /* ---------- 아두이노 · LoRa 연동 — focusguard_ai.py 의 ArduinoLink + _sync_to_arduino / _on_lora / _lora_refresh / lora_test 를
    Chrome Web Serial 로 옮긴 것. 송신 아두이노(lora_tx.ino)와 주고받는 줄은 파이썬 앱과 똑같다:
      PC → 송신 보드:  S,<학습샘플>,<수집링>,<모델버전>,<경과RF h>,<예측수명 h>,<평균오차 h>,<오차율 %×10>  /  F (테스트 송신)  /  R (재무장)  /  ? (누구니)
-     송신 보드 → PC:  BOOT·READY·INFO,TX,<기준>,...  /  GOT,<샘플>  /  SENT,<번호>,<샘플>,<시도>  /  ACK,<번호>,<RSSI>,<SNR>  /  NOACK,<번호>
+     송신 보드 → PC:  BOOT·READY·INFO,TX,<기준>,...,FW3.1  /  GOT,<샘플>  /  SENT,<번호>,<샘플>,<시도>  /  ACK,<번호>,<RSSI>,<SNR>  /  NOACK,<번호>
+                      LINK,OK,<RSSI>,<SNR> · LINK,FAIL (연결 점검)  /  CFG,... (모듈 설정)  /  SENDERR,<코드>  /  MODRESET,<출력>
+   v3 · v3.1 송신 보드(lora_tx.ino)와 짝: 무선 연결 점검 표시, 보조 송신(G), 수신 확인이 없으면 한 번 자동 재송신까지 파이썬 앱과 같게.
    차이는 하나: 브라우저는 보안상 포트를 마음대로 열 수 없어서, 처음 한 번은 'USB 연결'로 포트를 골라야 한다
    (그 뒤로는 Chrome이 기억해서 페이지를 열거나 보드를 다시 꽂으면 자동으로 연결). */
 const LORA_BAUD = 115200;
@@ -987,7 +989,9 @@ const LK = {
   port: null, writer: null, reader: null, name: '', ready: false, loraOk: null, threshold: 1000, fw: 1, gotN: null, gotT: null,
   probing: false, rx: new WeakSet(),
   stage: 'search', rssi: null, crossed: false, sentN: null, sentT: 0, metrics: [0, 0, 0], nT: 0, crossT: null, warned: new Set(),
+  fwBuild: '', cfg: null, readyT: 0, forced: false, retry: 0, link: null, linkRssi: null,   // v3: 보조 송신 · 자동 재송신 · 연결 점검
 };
+const FW_BUILD = 'FW3.1', LORA_CFG = ['6', '922000000', '9,7,1,12'];   // 송신 보드 코드 판번호 · 모듈 설정 (수신 보드와 같아야 함)
 const nowS = () => performance.now() / 1000;
 const pyRound = x => (Math.abs(x % 1) === .5 ? 2 * Math.round(x / 2) : Math.round(x));   // 파이썬 round (짝수 맞춤)
 const enc = new TextEncoder();
@@ -1086,9 +1090,18 @@ function linkHandle(line) {
   try {
     if (p[0] === 'GOT') { LK.gotN = int(p[1]); LK.gotT = nowS(); loraRefresh(); return; }
     console.log('[Arduino TX]', line);
+    if (p[0] === 'CFG') { LK.cfg = p.slice(1); onLora(['cfg', p.slice(1)]); return; }          // 부팅 때 모듈 설정 (수신 보드와 비교용)
+    if (p[0] === 'SENDERR') { onLora(['senderr', p.length > 1 ? p[1] : '?']); return; }       // 모듈이 AT+SEND 를 거부
+    if (p[0] === 'LINK') {                                                                    // 연결 점검(핑) 결과
+      const ok = p.length > 1 && p[1] === 'OK';
+      onLora(['link', ok, ok && p.length > 2 ? int(p[2]) : null]); return;
+    }
+    if (p[0] === 'MODRESET') { onLora(['modreset', p.length > 1 ? p[1] : '?']); return; }      // 모듈이 스스로 재시작됨 (전원 부족 의심)
+    if (p[0] === 'MOD' && line.includes('+ERR')) { onLora(['moderr', line.slice(4)]); return; } // 모듈이 설정 명령을 거부
     if (['BOOT', 'READY', 'INFO'].includes(p[0]) && p.length >= 3) {
       LK.threshold = int(p[2]);
       LK.fw = p.includes('V2') ? 2 : 1;
+      LK.fwBuild = p.find(x => /^FW\d/.test(x)) || '';
       if (p[0] === 'READY' || p[0] === 'INFO') { LK.ready = true; LK.loraOk = p.includes('LORA_OK'); onLora(['ready', LK.loraOk, LK.fw]); }
     } else if (p[0] === 'SENT') onLora(['sent', int(p[1]), int(p[2]), int(p[3])]);
     else if (p[0] === 'ACK') onLora(['ack', int(p[1]), int(p[2]), int(p[3])]);
@@ -1131,6 +1144,10 @@ function loraSync(force = false) {
     if (!LK.ready) log(`학습 샘플 ${fmt0(n)}개 ≥ ${fmt0(LK.threshold)} — 송신 아두이노가 연결되지 않아 LoRa 알림을 보내지 못함 `
       + '(상단 LoRa 표시의 \'USB 연결\'로 송신 보드 연결, 아두이노 IDE 시리얼 모니터가 포트를 잡고 있으면 닫기)', 'urg');
   }
+  // 보조 송신: 기준을 넘었는데 4초 안에 보드가 스스로 송신(SENT)하지 않으면 웹이 대신 송신 명령(G)을 보냄
+  // (보드가 상태 줄을 놓쳤거나 '이미 보냄' 상태로 남아 있어도 시연 중 알림이 반드시 나가게 함)
+  if (LK.crossT && LK.ready && LK.loraOk && !LK.forced && !['sending', 'acked', 'noack'].includes(LK.stage)
+      && now - Math.max(LK.crossT, LK.readyT) > 4.0) loraForce('보드가 자동 송신을 안 해서 웹이 대신 송신 요청');
   const got = LK.gotN == null ? '없음' : fmt0(LK.gotN);
   // 진단 ① 상태 줄을 보내는데 송신 보드의 확인(GOT)이 3.5초 넘게 없으면 경고 (V2 보드만 GOT를 보냄)
   const unanswered = LK.gotT == null || LK.gotT < LK.nT;
@@ -1138,13 +1155,23 @@ function loraSync(force = false) {
     LK.warned.add('got');
     log(`송신 보드가 시뮬레이션 상태를 못 받고 있음 (보낸 값 ${fmt0(LK.sentN)}, 보드 확인 ${got}) — USB 케이블을 다시 꽂거나 페이지를 새로 고침`, 'urg');
   }
-  // 진단 ② 기준을 넘었는데 6초 안에 송신(SENT)이 없으면 경고
-  if (LK.crossT && LK.ready && now - LK.crossT > 6.0 && !LK.warned.has('nosend') && !['sending', 'acked', 'noack'].includes(LK.stage)) {
+  // 진단 ② 기준을 넘었는데 (보조 송신 요청 뒤에도) 송신(SENT)이 없으면 경고
+  if (LK.crossT && LK.ready && now - Math.max(LK.crossT, LK.readyT) > 8.0 && !LK.warned.has('nosend') && !['sending', 'acked', 'noack'].includes(LK.stage)) {
     LK.warned.add('nosend');
     log(`학습 샘플이 ${fmt0(LK.threshold)}개를 넘었는데 송신 보드가 송신하지 않음 (보드 확인 값 ${got}) — 송신 보드에 최신 lora_tx.ino 가 올라갔는지 확인 후 '테스트 송신'으로 무선부터 점검`, 'urg');
     toast('송신 보드가 송신하지 않음', 'lora_tx.ino 다시 업로드 · 상단 \'테스트 송신\'으로 점검', COL.bad);
   }
   loraRefresh();
+}
+/* 웹이 송신 보드에 '지금 알림 보내기'(G)를 요청 — 최신 상태 줄을 먼저 보내 알림 내용(예측 수명·오차율)이 맞게 함 */
+function loraForce(reason) {
+  LK.forced = true;
+  if (S.pl) {
+    const m = loraMetrics();
+    linkSendStatus(S.pl.nSamples(), S.pl.records.length, S.pl.cur.no, S.steps * DT, ...m);
+    LK.metrics = m;
+  }
+  if (linkSend('G')) log(`LoRa ${reason}`, 'man');
 }
 /* USB를 쓸 수 없는 화면 — 기준 도달과 알림 내용만 표시 */
 function loraOffline(n) {
@@ -1170,8 +1197,14 @@ function onLora(m) {
       log('송신 보드 코드가 예전 버전 → 알림은 보내지만 예측 수명·오차율은 빠짐. 시뮬레이션을 끄고 lora_tx.ino 를 다시 업로드하세요', 'man');
       toast('송신 보드 코드가 예전 버전', '시뮬레이션을 끄고 lora_tx.ino 다시 업로드', COL.warn);
     }
+    if (LK.fwBuild !== FW_BUILD && !LK.warned.has('fw')) {
+      LK.warned.add('fw');
+      log(`송신 보드 코드가 v3.1이 아님 (${LK.fwBuild || '판번호 없음'}) — 수신 보드와 무선 설정이 달라 서로 못 들을 수 있음 → TX_laptop\\lora_tx\\lora_tx.ino(v3.1) 업로드`, 'urg');
+      toast('송신 보드 코드가 v3.1이 아님', '두 보드 모두 v3.1 코드를 업로드하세요 (송신 lora_tx · 수신 lora_rx)', COL.warn);
+    }
     linkSend('R');                                                   // 재무장: 지난 실행에서 '이미 보냄' 상태로 남아 있으면 다시 안 보내기 때문
     LK.sentN = null; LK.warned.delete('got');
+    Object.assign(LK, { readyT: nowS(), forced: false, retry: 0, link: null });
     loraSync(true);                                                  // 아두이노가 리셋됐으니 현재 상태를 바로 다시 알려줌
   } else if (kind === 'disc') {
     LK.stage = 'search';
@@ -1191,13 +1224,51 @@ function onLora(m) {
     } else log(`LoRa 재전송 #${seq} (시도 ${tries}) — 수신 확인 대기`, 'man');
   } else if (kind === 'ack') {
     const [, seq, rssi, snr] = m;
-    LK.stage = 'acked'; LK.rssi = rssi;
+    LK.stage = 'acked'; LK.rssi = rssi; LK.link = true; LK.linkRssi = rssi;
     log(`LoRa 수신 확인 #${seq} — 수신측이 알림을 받음 (RSSI ${rssi} dBm · SNR ${snr} dB)`, 'ai');
     toast('LoRa 수신 확인 ✓', `수신측이 알림을 받았습니다 · RSSI ${rssi} dBm · SNR ${snr} dB`, COL.good);
   } else if (kind === 'noack') {
     LK.stage = 'noack';
-    log(`LoRa #${m[1]} 수신 확인 없음 — 수신 보드 전원 · 주소 · NETWORK_ID · BAND 확인`, 'urg');
-    toast('LoRa 수신 확인 실패', '수신 보드 전원과 설정을 확인하세요 (테스트 송신으로 재시도)', COL.bad);
+    if (LK.retry < 1 && LK.crossed) {                                // 시연 중 한 번은 자동으로 다시 보냄
+      LK.retry++;
+      log(`LoRa #${m[1]} 수신 확인 없음 → 2초 뒤 자동으로 한 번 더 송신`, 'man');
+      setTimeout(() => loraForce('자동 재송신'), 2000);
+    } else {
+      log(`LoRa #${m[1]} 수신 확인 없음 — 수신 보드 전원 · 안테나 확인, 두 화면 로그의 모듈 설정이 (주소 빼고) 같은지 확인`, 'urg');
+      toast('LoRa 수신 확인 실패', '수신 보드 전원 · 안테나 확인 (테스트 송신으로 재시도)', COL.bad);
+    }
+  } else if (kind === 'cfg') {
+    const f = m[1], c = f.length >= 5 ? [f[0], f[1], f[2], f.slice(3, -1).join(','), f[f.length - 1]] : ['?', '?', '?', '?', '?'];
+    const [addr, net, band, par, pwr] = c, mhz = /^\d+$/.test(band) ? `${fix(+band / 1e6, 3)} MHz` : band;
+    log(`송신 모듈 설정 — 주소 ${addr} · 네트워크 ${net} · ${mhz} · 파라미터 ${par} · 출력 ${pwr} dBm (수신 화면의 모듈 설정과 주소만 빼고 같아야 통신됨)`, 'info');
+    if (c.includes('?')) {
+      log('송신 모듈 설정 일부를 못 읽음 — 모듈 배선(TXD→D2, RXD←D3 분압) · 3.3V 전원 확인', 'urg');
+      toast('송신 모듈 설정을 못 읽음', '배선(TXD→D2, RXD←D3) · 3.3V 전원 확인', COL.bad);
+    } else if (net !== LORA_CFG[0] || band !== LORA_CFG[1] || par !== LORA_CFG[2]) {
+      log('송신 모듈 설정이 코드 값(네트워크 6 · 922 MHz · 9,7,1,12)과 다름 → lora_tx.ino 다시 업로드', 'urg');
+      toast('송신 모듈 설정이 코드와 다름', 'lora_tx.ino 를 다시 업로드하세요', COL.bad);
+    }
+  } else if (kind === 'senderr') {
+    const hint = { 5: '데이터 길이 불일치', 17: '직전 송신이 아직 안 끝남', 18: '파라미터(프리앰블) 값이 허용 안 됨' }[m[1]] || '';
+    log(`LoRa 모듈이 송신을 거부함 (+ERR=${m[1]}${hint ? ' · ' + hint : ''}) — 자동으로 다시 시도함`, 'urg');
+  } else if (kind === 'moderr') {
+    log(`LoRa 모듈 명령 오류: ${m[1]}`, 'man');
+  } else if (kind === 'link') {                                     // 송신 보드의 연결 점검(핑) 결과 — 상태가 바뀔 때만 알림
+    const [, ok, rssi] = m;
+    if (ok) {
+      LK.linkRssi = rssi;
+      if (LK.link !== true) {
+        log(`LoRa 무선 연결 확인 ✓ — 수신 보드가 응답함 (RSSI ${rssi} dBm)`, 'ai');
+        toast('LoRa 무선 연결 확인 ✓', `수신 보드가 응답함 · RSSI ${rssi} dBm`, COL.good);
+      }
+    } else if (LK.link !== false) {
+      log('LoRa 수신 보드 응답 없음 — 수신 보드 USB 전원 · lora_rx.ino(v3.1) 업로드 · 안테나 확인, 두 화면 로그의 모듈 설정이 (주소 빼고) 같은지 확인', 'urg');
+      toast('LoRa 수신 보드 응답 없음', '수신 보드 전원 · lora_rx.ino(v3.1) 업로드 · 안테나 확인', COL.bad);
+    }
+    LK.link = ok;
+  } else if (kind === 'modreset') {
+    log(`LoRa 송신 모듈이 꺼졌다 켜짐 → 전원 부족 의심, 출력을 ${m[1]} dBm으로 낮춰 다시 설정함 (계속되면 모듈 VDD를 외부 3.3V로, GND는 우노와 공통)`, 'urg');
+    toast('LoRa 모듈 재시작 (전원 부족 의심)', `출력을 ${m[1]} dBm으로 낮춰 다시 설정함`, COL.warn);
   }
   loraRefresh();
 }
@@ -1217,8 +1288,9 @@ function loraRefresh() {
   else if (LK.stage === 'acked') { c = COL.good; t = `LoRa 송신 ✓ 수신 확인 (${LK.rssi} dBm)`; }
   else if (LK.stage === 'noack') { c = COL.bad; t = 'LoRa 송신 · 수신 확인 없음'; }
   else if (LK.fw < 2) { c = COL.warn; t = `LoRa ${port} · 샘플 ${fmt0(Math.min(n, th))} / ${fmt0(th)} (보드 코드 예전 버전)`; }
-  else if (LK.gotN == null) { c = COL.warn; t = `LoRa ${port} · 보드 응답 기다리는 중…`; }
-  else { c = COL.good; t = `LoRa ${port} · 보드 수신 ${fmt0(Math.min(LK.gotN, th))} / ${fmt0(th)}`; }
+  else if (LK.link === false) { c = COL.bad; t = `LoRa ${port} · 수신 보드 응답 없음`; }     // 핑에 수신 보드가 답하지 않음 → 알림을 보내도 못 받음
+  else if (LK.gotN == null) { [c, t] = LK.link ? [COL.good, `LoRa ${port} · 무선 ✓ · 시뮬레이션 대기`] : [COL.warn, `LoRa ${port} · 무선 연결 점검 중…`]; }
+  else { c = COL.good; t = `LoRa ${port} · ${LK.link ? '무선 ✓ · ' : ''}보드 수신 ${fmt0(Math.min(LK.gotN, th))} / ${fmt0(th)}`; }
   $('loraDot').style.background = c; $('loraLbl').textContent = t;
   $('loraUsb').hidden = LK.mode !== 'serial' || !!LK.port || LK.probing;
 }
