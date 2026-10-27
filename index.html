@@ -1,0 +1,1744 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>FocusGuard AI 시뮬레이터</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: the FocusGuard AI v6 desktop app (tkinter) rebuilt for the browser — header · pipeline flow bar · three working pages · status bar.
+   One deliberate light look, copied from the team's app, so the palette is fixed rather than theme-switched. */
+:root{
+  --bg:#f4f6fa; --panel:#ffffff; --panel2:#eff2f6; --ink:#111729; --muted:#677489; --faint:#8a94a6; --line:#e3e8ef;
+  --accent:#439288; --accent-d:#357a71; --accent2:#6466e9; --soft:#e9f5f4; --grid:#f1f3f7; --hover:#f6f8fa; --sel:#d7efeb;
+  --good:#4ca154; --warn:#cc7c2e; --bad:#cf4d45; --over:#d24a62;
+  --font:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR","Noto Sans CJK KR",system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.35 var(--font);-webkit-font-smoothing:antialiased;letter-spacing:-.005em}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+.app{min-height:100%;display:flex;flex-direction:column;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+
+/* header */
+.hd{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:16px 12px}
+.brand{display:flex;align-items:center;gap:14px;margin-right:auto;min-width:0}
+.logo{width:46px;height:46px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);display:grid;place-items:center;flex:none}
+.logo svg{width:31px;height:31px}
+.ttl{display:flex;align-items:center;gap:13px;font-size:26px;font-weight:700;letter-spacing:-.015em;line-height:1.15}
+.v6{font-size:12.5px;font-weight:700;color:var(--accent-d);background:var(--soft);padding:2px 6px;border-radius:3px;letter-spacing:0}
+.sub{margin-top:5px;font-size:14.5px;color:var(--muted)}
+.hd-r{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.clk{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-right:6px}
+.clk b{font-size:17.5px;line-height:1}
+.clk span{font-size:12.5px;color:var(--muted);line-height:1}
+.chip{display:flex;align-items:center;gap:9px;height:34px;padding:0 14px;background:var(--panel);border:1px solid var(--line);border-radius:3px;font-size:13px;white-space:nowrap}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+.lnk{border:0;background:none;padding:0;color:var(--accent2);text-decoration:underline;text-underline-offset:3px;font-size:12.5px}
+.pbar{position:relative;width:116px;height:11px;background:var(--panel2);overflow:hidden;flex:none}
+.pbar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent);transition:width .25s}
+.pbar.thin{height:6px;border-radius:3px}
+.btn{border:1px solid var(--line);background:var(--panel2);padding:8px 14px;border-radius:3px;font-size:14px;transition:background .15s,border-color .15s}
+.btn:hover:not(:disabled){background:var(--hover);border-color:var(--accent)}
+.btn.acc{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;padding:9px 18px}
+.btn.acc:hover:not(:disabled){background:var(--accent-d);border-color:var(--accent-d)}
+.btn:disabled{background:#cfd6de;border-color:#cfd6de;color:#f8fafc;cursor:default}
+.gl{height:2px;background:linear-gradient(90deg,rgba(244,246,250,0) 0%,#b2d4d5 6%,#4b7bb8 50%,#a9b1eb 90%,rgba(244,246,250,0) 100%)}
+
+/* panels */
+.card,.pn{background:var(--panel);border:1px solid var(--line);border-radius:7px;position:relative}
+.card::before,.pn::before{content:"";position:absolute;left:12px;right:12px;top:0;height:1px;background:#bededb}
+
+/* flow bar */
+.flow{display:flex;align-items:stretch;gap:0;margin-top:14px;padding:9px 10px}
+.ctl{display:flex;flex-direction:column;justify-content:center;gap:8px;padding:2px 14px 2px 4px}
+.ctl .btn{white-space:nowrap}
+.spd{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.spd select{border:1px solid var(--line);background:var(--panel2);padding:1px 4px;font-size:14px;color:var(--ink)}
+.vdiv{width:1px;background:var(--line);margin:0 10px 0 0;flex:none}
+.tile{flex:1 1 0;min-width:0;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:10px 16px 11px;transition:background .15s,border-color .15s}
+.tile:hover{background:var(--hover)}
+.tile.on{background:var(--panel2);border:1.5px solid var(--accent)}
+.tile em{display:flex;align-items:center;gap:8px;font-style:normal;font-size:12.5px;font-weight:700;color:var(--muted)}
+.tile em i{width:7px;height:7px;border-radius:50%}
+.tile b{display:block;margin-top:6px;font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile small{display:block;margin-top:8px;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arw{position:relative;width:46px;flex:none;align-self:center;height:20px}
+.arw::before{content:"";position:absolute;left:8px;right:12px;top:9px;height:2px;background:#dfe4ea;transition:background .2s}
+.arw::after{content:"";position:absolute;right:6px;top:5px;border:5px solid transparent;border-left:7px solid #dfe4ea;border-right:0;transition:border-color .2s}
+.arw i{position:absolute;top:7px;left:8px;width:6px;height:6px;border-radius:50%;background:var(--accent-d);opacity:0}
+.arw.on::before{background:var(--accent)} .arw.on::after{border-left-color:var(--accent)}
+.arw.on i{opacity:1;animation:arwDot 1s linear infinite}
+.arw.on i+i{animation-delay:-.5s}
+@keyframes arwDot{from{left:8px}to{left:30px}}
+
+/* pages */
+.pages{flex:1 0 auto;display:flex;padding-block:14px 12px;min-height:660px}
+.page{flex:1;display:grid;gap:18px;min-width:0}
+.page[hidden]{display:none}
+#pg-collect{grid-template-columns:556px minmax(0,1fr)}
+#pg-model{grid-template-columns:400px minmax(0,1fr)}
+#pg-value{grid-template-columns:340px minmax(0,1fr)}
+.pn{padding:14px 15px;min-width:0;display:flex;flex-direction:column}
+.pt{display:flex;align-items:center;gap:14px;font-size:19px;font-weight:700;letter-spacing:-.015em;margin:2px 0 0}
+.chm{font-size:11.5px;font-weight:700;color:var(--muted);background:var(--panel2);padding:3px 7px;border-radius:2px;letter-spacing:.01em}
+.live{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.pd{margin:5px 0 0;font-size:13.5px;color:var(--muted)}
+.ckb{display:inline-flex;align-items:center;gap:9px;margin-top:12px;font-size:14.5px;cursor:pointer;user-select:none}
+.ckb input{appearance:none;width:16px;height:16px;margin:0;border:1px solid var(--line);background:var(--panel2);display:grid;place-items:center;cursor:pointer}
+.ckb input:checked{background:var(--accent);border-color:var(--accent)}
+.ckb input:checked::after{content:"";width:9px;height:9px;background:linear-gradient(45deg,transparent 43%,#fff 43%,#fff 57%,transparent 57%),linear-gradient(-45deg,transparent 43%,#fff 43%,#fff 57%,transparent 57%)}
+.sh{display:flex;align-items:center;gap:14px;margin:16px 0 8px;font-size:13.5px;font-weight:700;color:var(--muted);white-space:nowrap}
+.sh::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* chamber cards */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+.cd{position:relative;height:67px;border:1px solid var(--line);border-radius:3px;background:var(--panel);cursor:pointer;text-align:left;padding:0;transition:background .12s,border-color .12s}
+.cd:hover{background:var(--hover);border-color:#c5ccd6}
+.cd.sel{border:1.5px solid var(--accent);background:var(--panel2)}
+.cd>*{position:absolute}
+.cd .gg{left:10.5px;top:8px;width:50px;height:50px}
+.cd .gk{fill:none;stroke:var(--grid);stroke-width:5.5}
+.cd .ga{fill:none;stroke-width:5.5;transition:stroke-dasharray .4s}
+.cd .gp{font:700 13.5px var(--font);fill:var(--ink)}
+.cd .nm{left:72.5px;top:5px;font-size:15px;font-weight:700;white-space:nowrap}
+.cd .bd{right:6px;top:6px;padding:1px 8px;border-radius:9px;font-size:12px;font-weight:700;border:1px solid}
+.cd .mt{left:72.5px;top:23px;font-size:11.5px;color:var(--muted);white-space:nowrap;letter-spacing:-.02em;max-width:calc(100% - 80px);overflow:hidden;text-overflow:ellipsis}
+.cd .v{left:72.5px;top:39px;display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+.cd .v b{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.cd .v small{font-size:12px;color:var(--muted)}
+.cd .tr{right:11px;top:44px;font-size:11.5px;color:var(--faint);white-space:nowrap}
+
+/* tables */
+.tbw{border:1px solid var(--line);overflow:auto;min-height:0}
+table.tv{width:100%;border-collapse:collapse;font-size:13px}
+table.tv th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font-weight:700;padding:6px 6px;white-space:nowrap}
+table.tv td{padding:4px 6px;text-align:center;border-bottom:1px solid var(--grid);white-space:nowrap}
+table.tv tr.new td{animation:rowIn 1.2s ease-out}
+@keyframes rowIn{from{background:var(--sel)}to{background:transparent}}
+
+/* right detail */
+.ct{font-size:19.5px;font-weight:700;letter-spacing:-.01em;margin:2px 4px 0}
+.cs{margin:6px 4px 0;font-size:13.5px;color:var(--muted)}
+.fig{position:relative;flex:1 1 auto;min-height:420px;margin-top:6px}
+.fig svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.log{height:76px;overflow:auto;padding:4px 10px;font-size:13px;line-height:1.55;white-space:nowrap}
+.log p{margin:0;color:var(--ink)}
+.log p i{font-style:normal;margin-right:6px}
+.log p span{color:var(--muted);margin-right:8px;font-variant-numeric:tabular-nums}
+
+/* model / value pages */
+.stats{display:grid;gap:8px 6px;margin-top:10px}
+.stats.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.stats.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.st{background:var(--panel2);border-radius:3px;padding:6px 10px 7px;min-width:0}
+.st span{display:block;font-size:11.5px;color:var(--muted)}
+.st b{display:block;font-size:18px;font-weight:700;margin-top:1px;white-space:nowrap}
+.sld{margin-top:6px}
+.sld .top{display:flex;justify-content:space-between;font-size:13.5px}
+.sld output{color:var(--accent-d);font-weight:700}
+input[type=range]{width:100%;accent-color:var(--accent);margin:4px 0 0}
+.row{display:flex;align-items:center;gap:10px;margin-top:8px}
+.row .btn{margin-left:auto}
+.sel-row{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;font-weight:700;color:var(--muted)}
+.sel-row select{flex:1;min-width:0;border:1px solid var(--line);background:var(--panel2);padding:4px 6px;font-size:13px;font-weight:400;color:var(--ink)}
+.ins{display:flex;margin-top:12px;background:var(--soft)}
+.ins::before{content:"";width:3px;background:var(--accent);flex:none}
+.ins div{padding:9px 12px 10px;min-width:0}
+.ins b{display:block;font-size:11.5px;color:var(--accent-d);margin-bottom:3px}
+.ins p{margin:0;font-size:13px;line-height:1.55;white-space:pre-line}
+.hdr2{display:flex;align-items:baseline;gap:9px;font-size:14px;font-weight:700}
+.hdr2 span{font-size:11.5px;font-weight:400;color:var(--muted)}
+.cfg{display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:4px 8px;align-items:center;font-size:13px}
+.cfg input{width:100%;text-align:right;border:1px solid var(--line);background:var(--panel2);padding:3px 7px;font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+
+/* footer */
+.ft{display:flex;align-items:center;gap:10px;margin-left:calc(-1 * max(20px, env(safe-area-inset-left,0px)));margin-right:calc(-1 * max(20px, env(safe-area-inset-right,0px)));padding-block:7px calc(7px + env(safe-area-inset-bottom,0px));padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));background:var(--panel);border-top:1px solid var(--line);font-size:13px;white-space:nowrap;overflow:hidden}
+.ft>i{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none}
+.ft #foot{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ft .ver{margin-left:auto;font-size:12px;color:var(--muted)}
+
+/* toast */
+.toast{position:fixed;right:calc(26px + env(safe-area-inset-right,0px));bottom:calc(52px + env(safe-area-inset-bottom,0px));z-index:30;display:flex;max-width:min(460px,calc(100vw - 40px));background:var(--panel2);border:1px solid var(--line);box-shadow:0 16px 40px -18px rgba(17,23,41,.45);animation:tIn .25s ease-out}
+.toast::before{content:"";width:4px;background:var(--tc,var(--accent));flex:none}
+.toast div{padding:9px 18px 10px 12px;min-width:0}
+.toast b{display:block;font-size:14px;color:var(--tc,var(--accent))}
+.toast p{margin:2px 0 0;font-size:12.5px;color:var(--muted);white-space:pre-line}
+@keyframes tIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* splash */
+.splash{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(244,246,250,.96);transition:opacity .45s}
+.splash.out{opacity:0;pointer-events:none}
+.sp-card{width:min(700px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);box-shadow:0 30px 70px -30px rgba(17,23,41,.35)}
+.sp-card canvas{display:block;width:100%;height:180px;background:#f1f5f9}
+.sp-body{padding:14px 28px 14px}
+.sp-h{display:flex;align-items:baseline;gap:10px}
+.sp-h b{font-size:29px;font-weight:700}
+.sp-h em{font-style:normal;font-size:14px;font-weight:700;color:var(--accent)}
+.sp-h span{margin-left:auto;font-size:11px;color:var(--muted)}
+.sp-sub{font-size:13px;color:var(--muted)}
+.sp-steps{margin:12px 0 8px;font-size:12.5px;line-height:1.7}
+.sp-steps div{color:var(--muted)}
+.sp-steps .done{color:var(--good)} .sp-steps .cur{color:var(--ink)}
+.sp-bar{height:8px;background:var(--panel2);border:1px solid var(--line);position:relative}
+.sp-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent);transition:width .2s}
+.sp-msg{margin-top:4px;font-size:11.5px;color:var(--muted)}
+
+/* save modal */
+.modal{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:rgba(17,23,41,.35);padding:16px}
+.modal[hidden]{display:none}
+.md-card{width:min(760px,100%);max-height:calc(100% - 20px);overflow:auto;background:var(--panel);border:1px solid var(--line);padding:18px 20px;box-shadow:0 30px 70px -30px rgba(17,23,41,.5)}
+.md-card h3{margin:0;font-size:18px}
+.md-card p{margin:6px 0 0;font-size:13px;color:var(--muted)}
+.md-card label{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:13px;font-weight:700}
+.md-card label .btn{margin-left:auto;padding:4px 12px;font-size:12.5px}
+.md-card textarea{width:100%;height:130px;margin-top:6px;border:1px solid var(--line);background:var(--panel2);font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;padding:8px;resize:vertical}
+.md-card .end{display:flex;justify-content:flex-end;margin-top:14px}
+
+@media (max-width:1180px){
+  #pg-collect,#pg-model,#pg-value{grid-template-columns:minmax(0,1fr)}
+  .pages{min-height:0}
+  .fig{min-height:460px}
+}
+@media (max-width:900px){
+  .flow{flex-wrap:wrap;gap:8px}
+  .ctl{flex-direction:row;align-items:center;width:100%;padding:0}
+  .vdiv,.arw{display:none}
+  .tile{flex:1 1 100%}
+  .hd-r{width:100%}
+  .clk{display:none}
+}
+@media (max-width:560px){
+  .grid2{grid-template-columns:minmax(0,1fr)}
+  .stats.c3,.stats.c4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ttl{font-size:22px}
+  .chip{white-space:normal;height:auto;min-height:34px;padding-block:6px}
+  .fig{min-height:380px}
+}
+@media (prefers-reduced-motion:reduce){.arw.on i{animation:none;opacity:0}.toast{animation:none}table.tv tr.new td{animation:none}}
+</style>
+
+<div class="app" id="app">
+  <header class="hd">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11.5" fill="none" stroke="#439288" stroke-width="4.2"/><path d="M26.4 11.1A11.5 11.5 0 0 0 19.9 5.2" fill="none" stroke="#cf4d45" stroke-width="4.2"/><circle cx="16" cy="16" r="4.2" fill="#6466e9"/></svg></span>
+      <div><div class="ttl">FocusGuard AI<span class="v6">v6</span></div><div class="sub">플라즈마 식각 포커스링 &nbsp;마모 · 잔여수명 시뮬레이터</div></div>
+    </div>
+    <div class="hd-r">
+      <div class="clk num"><b id="clk">--:--:--</b><span id="clkd"></span></div>
+      <div class="chip"><i class="dot" id="loraDot"></i><span id="loraLbl" class="num">LoRa 송신기 찾는 중…</span><button type="button" class="lnk" id="loraUsb" hidden>USB 연결</button><button type="button" class="lnk" id="loraTest">테스트 송신</button></div>
+      <div class="chip"><i class="dot" id="bootDot" style="background:var(--warn)"></i><span id="bootLbl">AI 모델 준비 중…</span><span class="pbar"><i id="bootBar"></i></span></div>
+      <button type="button" class="btn acc" id="saveBtn">⬇&nbsp; 결과 저장</button>
+    </div>
+  </header>
+  <div class="gl" aria-hidden="true"></div>
+
+  <section class="flow card" aria-label="파이프라인">
+    <div class="ctl">
+      <button type="button" class="btn acc" id="simBtn" disabled>▶&nbsp; 시뮬레이션 시작</button>
+      <label class="spd" for="speed">배속 <select id="speed"><option value="4">×4</option><option value="12" selected>×12</option><option value="30">×30</option><option value="60">×60</option></select></label>
+    </div>
+    <i class="vdiv" aria-hidden="true"></i>
+    <button type="button" class="tile" data-page="collect"><em><i style="background:var(--accent)"></i>①&nbsp; 데이터 수집 · 원주 팹</em><b id="tv-collect">준비 중…</b><small id="ts-collect" class="num">&nbsp;</small></button>
+    <span class="arw" id="arw0" aria-hidden="true"><i></i><i></i></span>
+    <button type="button" class="tile" data-page="model"><em><i style="background:var(--accent2)"></i>②&nbsp; 모델 학습 · 수명 예측</em><b id="tv-model">준비 중…</b><small id="ts-model" class="num">&nbsp;</small></button>
+    <span class="arw" id="arw1" aria-hidden="true"><i></i><i></i></span>
+    <button type="button" class="tile" data-page="value"><em><i style="background:var(--good)"></i>③&nbsp; 가치 환산</em><b id="tv-value">준비 중…</b><small id="ts-value" class="num">&nbsp;</small></button>
+  </section>
+
+  <main class="pages">
+    <!-- ① 데이터 수집 -->
+    <section class="page" id="pg-collect" aria-label="데이터 수집">
+      <div class="pn">
+        <div class="pt">원주 팹 · 식각 베이 A<span class="chm">8 CHAMBERS</span><span class="live"><i class="dot" id="liveDot"></i><span id="liveLbl">PAUSED</span></span></div>
+        <p class="pd">마모 한계(1,000 µm) 도달 → 수명 확정 → 학습 데이터 적재 &nbsp;·&nbsp; 1스텝 = RF 4 h</p>
+        <label class="ckb" for="truth"><input type="checkbox" id="truth" checked>시뮬레이터 정답 함께 표시</label>
+        <div id="cards"></div>
+        <div class="sh">수집된 수명 데이터 &nbsp;·&nbsp; 학습셋</div>
+        <div class="tbw" style="height:150px"><table class="tv num"><thead><tr><th>#</th><th>챔버</th><th>소재</th><th>확정 수명</th><th>샘플</th><th>운영 중 오차</th><th>당시 모델</th></tr></thead><tbody id="dataTb"></tbody></table></div>
+      </div>
+      <div class="pn">
+        <div class="ct num" id="detTitle">&nbsp;</div>
+        <div class="cs num" id="detSub">&nbsp;</div>
+        <div class="fig" id="figCollect" role="img" aria-label="선택한 챔버의 센서 기록과 AI 예측 잔여수명 그래프"></div>
+        <div class="sh" style="margin:6px 4px 2px">이벤트 로그</div>
+        <div class="log" id="log"></div>
+      </div>
+    </section>
+
+    <!-- ② 모델 학습 · 수명 예측 -->
+    <section class="page" id="pg-model" aria-label="모델 학습 · 수명 예측" hidden>
+      <div class="pn">
+        <div class="pt">모델 학습 · 수명 예측</div>
+        <p class="pd">원주 팹 확정 수명 → 재학습 → 새 버전 배포 → 검증 링 30개로 정확도 평가</p>
+        <div class="stats c3 num">
+          <div class="st"><span>수집 링</span><b id="m-rings">—</b></div><div class="st"><span>배포 모델</span><b id="m-ver">—</b></div><div class="st"><span>검증 오차</span><b id="m-mae">—</b></div>
+          <div class="st"><span>학습 샘플</span><b id="m-samples">—</b></div><div class="st"><span>v0 대비</span><b id="m-imp">—</b></div><div class="st"><span>±100 h 적중</span><b id="m-hit">—</b></div>
+        </div>
+        <div class="sh">재학습 정책</div>
+        <div class="sld"><div class="top"><label for="trEvery">자동 재학습 주기 (수집 링 N개마다)</label><output id="trEveryO" for="trEvery">4개</output></div><input type="range" id="trEvery" min="1" max="10" step="1" value="4"></div>
+        <div class="sld"><div class="top"><label for="trEpochs">학습 epoch</label><output id="trEpochsO" for="trEpochs">30</output></div><input type="range" id="trEpochs" min="10" max="60" step="5" value="30"></div>
+        <div class="row"><label class="ckb" for="trFt" style="margin:0"><input type="checkbox" id="trFt" checked>물리 모델(v0)에서 미세조정</label><button type="button" class="btn" id="trBtn" disabled>⟳&nbsp; 지금 재학습</button></div>
+        <span class="pbar thin" style="width:100%;margin-top:8px"><i id="trBar"></i></span>
+        <div class="sh">모델 버전</div>
+        <div class="tbw" style="height:116px"><table class="tv num"><thead><tr><th>버전</th><th>학습 링</th><th>샘플</th><th>검증 오차</th><th>v0 대비</th></tr></thead><tbody id="verTb"></tbody></table></div>
+        <div class="sel-row"><label for="prRing">예시 검증 링</label><select id="prRing"></select></div>
+        <div class="ins"><div><b>✦&nbsp; 정확도 추이</b><p id="prTxt">모델 준비 중…</p></div></div>
+      </div>
+      <div class="pn">
+        <div class="hdr2">CVD/ALD/PVD · CMP 링 현황<span>마모율 기반 관리 · AI 예측 미적용</span></div>
+        <div class="stats c4 num" style="margin-top:6px">
+          <div class="st"><span>비식각 챔버</span><b id="c-count">—</b></div><div class="st"><span>주의 이상</span><b id="c-warn">—</b></div>
+          <div class="st"><span>평균 마모율</span><b id="c-wear">—</b></div><div class="st"><span>평균 잔여</span><b id="c-rul">—</b></div>
+        </div>
+        <div class="fig" id="figModel" role="img" aria-label="학습 곡선, 수집 링 수에 따른 오차, 학습 데이터 누적, 예측 대 실제, 검증 링 추적, 물리 모델 편차 그래프"></div>
+      </div>
+    </section>
+
+    <!-- ③ 가치 환산 -->
+    <section class="page" id="pg-value" aria-label="가치 환산" hidden>
+      <div class="pn">
+        <div class="pt">가치 환산</div>
+        <p class="pd">모델 정확도 → 교체 시점 → 연간 비용<br>(검증 링 30개 · 고정 주기 교체 대비)</p>
+        <div class="cfg num" style="margin-top:10px" id="cfg"></div>
+        <div class="sld" style="margin-top:10px"><div class="top"><label for="vMargin">교체 기준 (남은 수명)</label><output id="vMarginO" for="vMargin">24 h</output></div><input type="range" id="vMargin" min="0" max="120" step="6" value="24"></div>
+        <div class="sld"><div class="top"><label for="vKs">안전 여유 (× 모델 오차)</label><output id="vKsO" for="vKs">1.00×</output></div><input type="range" id="vKs" min="0" max="2" step="0.25" value="1"></div>
+        <div class="ins"><div><b>✦&nbsp; 연간 가치</b><p id="valTxt">모델 준비 중…</p></div></div>
+      </div>
+      <div class="pn"><div class="fig" id="figValue" role="img" aria-label="버전별 연간 절감액, 연간 비용 구성, 수명 활용률 그래프" style="margin-top:0"></div></div>
+    </section>
+  </main>
+
+  <footer class="ft"><i></i><span id="foot">데이터 소스: 물리 기반 마모 모델 (실측 장비 데이터 연결 전)</span><span class="ver">FocusGuard AI v6 &nbsp;·&nbsp; 웹 버전</span></footer>
+</div>
+
+<div class="toast" id="toast" role="status" hidden><div><b id="toastT"></b><p id="toastS"></p></div></div>
+
+<div class="splash" id="splash" aria-live="polite">
+  <div class="sp-card">
+    <canvas id="spCv" width="698" height="180" aria-hidden="true"></canvas>
+    <div class="sp-body">
+      <div class="sp-h"><b>FocusGuard AI</b><em>v6</em><span>웹 버전</span></div>
+      <div class="sp-sub">플라즈마 식각 포커스링 &nbsp;마모 · 잔여수명 시뮬레이터</div>
+      <div class="sp-steps" id="spSteps"></div>
+      <div class="sp-bar"><i id="spBar"></i></div>
+      <div class="sp-msg" id="spMsg">시작하는 중…</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="saveModal" role="dialog" aria-modal="true" aria-labelledby="saveT" hidden>
+  <div class="md-card">
+    <h3 id="saveT">결과 저장</h3>
+    <p>웹 화면에서는 파일을 바로 내려받을 수 없어서, 결과를 CSV 형식으로 보여 줘요. 복사해서 엑셀이나 메모장에 붙여 넣으세요.</p>
+    <label for="csvRec">수집 데이터 (수명이 확정된 링)<button type="button" class="btn" data-copy="csvRec">복사</button></label>
+    <textarea id="csvRec" readonly></textarea>
+    <label for="csvVer">모델 버전별 정확도 · 연간 절감액<button type="button" class="btn" data-copy="csvVer">복사</button></label>
+    <textarea id="csvVer" readonly></textarea>
+    <div class="end"><button type="button" class="btn acc" id="saveClose">닫기</button></div>
+  </div>
+</div>
+
+<script>
+/* numpy ziggurat tables (numpy/random/src/distributions/ziggurat_constants.h) */
+const ZIG = {
+ ki: [4208095142473578,0,3387314423973544,3838760076542274,4030768804392682,4136731738896254,4203757248105145,4249917568205994,4283617341590296,4309289223136604,4329489775174550,4345795907393188,4359232558744730,4370494503737299,4380069246215646,4388308869042394,4395473957549321,4401761481783924,4407323076021240,4412277362218204,4416718463613199,4420722014516422,4424349484777079,4427651345409294,4430669422005229,4433438668975191,4435988524278344,4438343955930065,4440526279077425,4442553800234660,4444442329865861,4446205593658138,4447855565093316,4449402736340121,4450856340408624,4452224534496486,4453514552210512,4454732830656798,4455885117109368,4456976558985043,4458011780094444,4458994945550386,4459929817254120,4460819801517196,4461667990089170,4462477195632268,4463249982500384,4463988693531856,4464695473445501,4465372289331869,4466020948651920,4466643115089764,4467240322552142,4467813987562542,4468365420260672,4468895834186994,4469406355006040,4469898028300364,4470371826548633,4470828655385770,4471269359229841,4471694726349190,4472105493433674,4472502349725738,4472885940759935,4473256871753524,4473615710685532,4473962991097124,4474299214642296,4474624853414418,4474940352071305,4475246129778808,4475542581990776,4475830082081194,4476108982842610,4476379617863426,4476642302795321,4476897336520866,4477145002230339,4477385568415884,4477619289790266,4477846408136804,4478067153096380,4478281742896886,4478490385029917,4478693276879082,4478890606303906,4479082552182886,4479269284918997,4479450966910588,4479627752990372,4479799790834988,4479967221347354,4480130179013872,4480288792238368,4480443183654460,4480593470417939,4480739764480586,4480882172846772,4481020797814010,4481155737198612,4481287084547452,4481414929336784,4481539357158974,4481660449897960,4481778285894165,4481892940099539,4482004484223382,4482112986869492,4482218513665204,4482321127382802,4482420888053758,4482517853076245,4482612077316275,4482703613202871,4482792510817576,4482878817978627,4482962580320076,4483043841366126,4483122642600925,4483199023534056,4483273021761922,4483344673025224,4483414011262724,4483481068661428,4483545875703378,4483608461209170,4483668852378323,4483727074826624,4483783152620564,4483837108308932,4483888962951686,4483938736146144,4483986446050596,4484032109405372,4484075741551420,4484117356446452,4484156966678662,4484194583478081,4484230216725550,4484263874959345,4484295565379450,4484325293849474,4484353064896186,4484378881706674,4484402746123075,4484424658634833,4484444618368474,4484462623074794,4484478669113436,4484492751434740,4484504863558830,4484514997551788,4484523143998833,4484529291974394,4484533429008906,4484535541052219,4484535612433424,4484533625816926,4484529562154580,4484523400633636,4484515118620291,4484504691598554,4484492093104164,4484477294653230,4484460265665252,4484440973380154,4484419382768918,4484395456437370,4484369154522621,4484340434581640,4484309251471359,4484275557219678,4484239300886654,4484200428415112,4484158882469814,4484114602264271,4484067523374160,4484017577536216,4483964692431365,4483908791450714,4483849793442887,4483787612441036,4483722157367660,4483653331715198,4483581033200083,4483505153387764,4483425577285833,4483342182902157,4483254840764470,4483163413397547,4483067754753536,4482967709590562,4482863112794072,4482753788634692,4482639549955636,4482520197281720,4482395517841076,4482265284489409,4482129254525304,4481987168383486,4481838748191074,4481683696169781,4481521692864464,4481352395175570,4481175434169564,4480990412637506,4480796902367134,4480594441088331,4480382529045225,4480160625140311,4479928142586662,4479684443993061,4479428835793398,4479160561915451,4478878796564388,4478582635972392,4478271088936406,4477943065929958,4477597366530538,4477232664848704,4476847492576192,4476440219183781,4476009028690434,4475551892286424,4475066535915646,4474550401693506,4474000601739904,4473413862618200,4472786458058295,4472114126959004,4471391972746494,4470614338917719,4469774653883156,4468865235838896,4467877045039530,4466799366045354,4465619395558397,4464321701199635,4462887501169282,4461293691124341,4459511507635972,4457504658253067,4455226650325010,4452616884242348,4449594783440798,4446050695647666,4441831266659618,4436714892174061,4430368316897338,4422264825074740,4411517007702132,4396496531309976,4373832704204284,4335125104963628,4251099761679434],
+ ke: [7971545857431494,0,5485857970336126,6877400373607440,7489560515621038,7829793950745724,8045251395085594,8193552821270898,8301707212298418,8384003209374832,8448689755168200,8500854585063478,8543802742323106,8579772857648236,8610334328270398,8636619566280862,8659465946817878,8679505875409358,8697225801520776,8713005977443536,8727147906454692,8739893704890038,8751440024696698,8761948238062960,8771552003860596,8780362968290610,8788475114930438,8795968123070796,8802909988292858,8809359087581710,8815365821575970,8820973931588800,8826221564107158,8831142137483404,8835765052397426,8840116277974648,8844218838221542,8848093218006260,8851757703688506,8855228670347734,8858520825126080,8861647414312948,8864620400320394,8867450613535032,8870147883110754,8872721150032146,8875178565190242,8877527574738170,8879774994610604,8881927075778634,8883989561556502,8885967738067168,8887866478800856,8889690284057818,8891443315947666,8893129429518482,8894752200505984,8896314950123264,8897820767252858,8899272528353282,8900672915349966,8902024431744704,8903329417147192,8904590060406012,8905808411494018,8906986392283810,8908125806332284,8909228347778946,8910295609450180,8911329090250868,8912330201915374,8913300275181656,8914240565445170,8915152257942916,8916036472512488,8916894267966144,8917726646115692,8918534555480190,8919318894705170,8920080515719156,8920820226650618,8921538794526266,8922236947769418,8922915378515480,8923574744759820,8924215672351958,8924838756848636,8925444565237162,8926033637539416,8926606488305930,8927163608008600,8927705464339880,8928232503425544,8928745150957558,8929243813252980,8929728878244356,8930200716406566,8930659681624710,8931106112007190,8931540330647876,8931962646340834,8932373354250910,8932772736543124,8933161062973652,8933538591444894,8933905568527004,8934262229948010,8934608801054528,8934945497244894,8935272524376414,8935590079148328,8935898349461876,8936197514758882,8936487746340036,8936769207664048,8937042054628744,8937306435835058,8937562492834854,8937810360363402,8938050166557284,8938282033158466,8938506075705162,8938722403710132,8938931120826946,8939132325004766,8939326108632062,8939512558669762,8939691756774158,8939863779409990,8940028697953972,8940186578789100,8940337483389966,8940481468399302,8940618585695992,8940748882454662,8940872401197050,8940989179835208,8941099251706688,8941202645601704,8941299385782368,8941389491993960,8941472979468230,8941549858918698,8941620136527848,8941683813926148,8941740888162738,8941791351667640,8941835192205302,8941872392819226,8941902931767472,8941926782448690,8941943913318396,8941954287795084,8941957864155806,8941954595420724,8941944429226144,8941927307685492,8941903167237602,8941871938481652,8941833545998016,8941787908154234,8941734936895206,8941674537516674,8941606608420918,8941531040853536,8941447718620056,8941356517781006,8941257306323958,8941149943810914,8941034280999228,8940910159434164,8940777411010892,8940635857503634,8940485310059376,8940325568653336,8940156421503112,8939977644438114,8939789000220574,8939590237814000,8939381091594596,8939161280500638,8938930507114326,8938688456670012,8938434795982096,8938169172285110,8937891211977748,8937600519261604,8937296674664432,8936979233436516,8936647723807416,8936301645088910,8935940465608202,8935563620453574,8935170509012442,8934760492279316,8934332889908232,8933886976981030,8933421980459034,8932937075281380,8932431380068266,8931903952381602,8931353783488908,8930779792568492,8930180820284952,8929555621653500,8928902858099222,8928221088602964,8927508759808348,8926764194944404,8925985581394242,8925170956711904,8924318192855506,8923424978364230,8922488798157886,8921506910578770,8920476321224196,8919393753031106,8918255611967910,8917057947558148,8915796407299442,8914466183841290,8913061953535784,8911577804662434,8910007153233212,8908342643782164,8906576031902208,8904698044465300,8902698212389652,8900564669414922,8898283908495804,8895840484961220,8893216652275640,8890391911743352,8887342451323378,8884040440144924,8880453133239800,8876541723776518,8872259855113102,8867551668208538,8862349204777254,8856568902200012,8850106784293916,8842831740745002,8834575940248166,8825120832349124,8814176156651890,8801347484544986,8786084197194146,8767592496903178,8744682338845716,8715480686119910,8676850260251934,8623083654098352,8542525795804796,8406823688997808,8122426762520768],
+ wi: [8.683627060801306e-16,4.779330175727737e-17,6.354352417405262e-17,7.454870481247696e-17,8.3293668157931e-17,9.068060405059482e-17,9.714860076567762e-17,1.0294750314241019e-16,1.0823430288447684e-16,1.131147019610903e-16,1.176635945702292e-16,1.2193617278714363e-16,1.2597439914637093e-16,1.2981099886264032e-16,1.3347203736824123e-16,1.3697864842571203e-16,1.4034823001242382e-16,1.4359529452056943e-16,1.4673208742364422e-16,1.4976904668391037e-16,1.5271515003596198e-16,1.5557818169460764e-16,1.5836494009290885e-16,1.6108140175274928e-16,1.6373285203969853e-16,1.6632399058420835e-16,1.6885901708676596e-16,1.713417017655966e-16,1.737754436586486e-16,1.7616331923000996e-16,1.7850812316976727e-16,1.8081240285799152e-16,1.830784876482675e-16,1.853085138861802e-16,1.8750444639373882e-16,1.896680970077476e-16,1.918011406483862e-16,1.9390512930625104e-16,1.9598150426628824e-16,1.9803160683128174e-16,2.000566877627333e-16,2.0205791562071654e-16,2.0403638415480212e-16,2.0599311887403706e-16,2.079290829041402e-16,2.0984518222370352e-16,2.1174227035760342e-16,2.1362115259449868e-16,2.1548258978581458e-16,2.1732730177564367e-16,2.191559705042727e-16,2.2096924282235318e-16,2.2276773304789553e-16,2.2455202529414355e-16,2.263226755928568e-16,2.280802138345017e-16,2.2982514554424684e-16,2.3155795351040804e-16,2.3327909928004356e-16,2.3498902453470955e-16,2.3668815235791604e-16,2.3837688840454243e-16,2.4005562198135063e-16,2.4172472704675025e-16,2.433845631371103e-16,2.4503547622614954e-16,2.466777995232705e-16,2.4831185421610877e-16,2.4993795016204524e-16,2.515563865329658e-16,2.5316745241713583e-16,2.547714273816944e-16,2.563685819989397e-16,2.579591783392867e-16,2.5954347043351707e-16,2.6112170470670194e-16,2.6269412038597256e-16,2.6426094988411895e-16,2.658224191608307e-16,2.6737874806323633e-16,2.689301506472616e-16,2.704768354811995e-16,2.720190059327732e-16,2.735568604408679e-16,2.7509059277301666e-16,2.7662039226963903e-16,2.781464440759544e-16,2.79668929362423e-16,2.8118802553450207e-16,2.827039064324479e-16,2.842167425218406e-16,2.8572670107546015e-16,2.87233946347098e-16,2.887386397378482e-16,2.9024093995538423e-16,2.9174100316669455e-16,2.9323898314471816e-16,2.947350314092935e-16,2.9622929736280665e-16,2.977219284209029e-16,2.992130701386013e-16,3.007028663321331e-16,3.0219145919680615e-16,3.036789894211802e-16,3.051655962978219e-16,3.0665141783089545e-16,3.081365908408297e-16,3.0962125106629225e-16,3.111055332636893e-16,3.125895713043999e-16,3.140734982699446e-16,3.1555744654528006e-16,3.1704154791040285e-16,3.1852593363044065e-16,3.2001073454440114e-16,3.214960811527447e-16,3.2298210370394156e-16,3.244689322801698e-16,3.2595669688230784e-16,3.2744552751437067e-16,3.2893555426753697e-16,3.3042690740391284e-16,3.3191971744017523e-16,3.3341411523123725e-16,3.3491023205407785e-16,3.364081996918765e-16,3.37908150518595e-16,3.394102175841489e-16,3.409145347003126e-16,3.424212365275018e-16,3.4393045866258313e-16,3.454423377278584e-16,3.4695701146137835e-16,3.4847461880874137e-16,3.499953000165381e-16,3.5151919672760744e-16,3.53046452078274e-16,3.5457721079774357e-16,3.5611161930983884e-16,3.5764982583726505e-16,3.59191980508603e-16,3.6073823546823514e-16,3.6228874498941915e-16,3.6384366559073444e-16,3.65403156156137e-16,3.669673780588701e-16,3.685364952894914e-16,3.7011067458828983e-16,3.716900855823823e-16,3.7327490092779435e-16,3.7486529645684887e-16,3.7646145133120287e-16,3.7806354820089604e-16,3.7967177336979443e-16,3.8128631696783774e-16,3.829073731305243e-16,3.8453514018609596e-16,3.8616982085091493e-16,3.878116224335587e-16,3.894607570481926e-16,3.9111744183782054e-16,3.9278189920805415e-16,3.944543570720877e-16,3.9613504910761354e-16,3.9782421502646826e-16,3.995221008578565e-16,4.012289592460629e-16,4.029450497636328e-16,4.04670639241075e-16,4.0640600211422504e-16,4.0815142079049387e-16,4.0990718603532664e-16,4.1167359738030257e-16,4.134509635544236e-16,4.1523960294026883e-16,4.170398440568316e-16,4.1885202607101123e-16,4.206764993399015e-16,4.2251362598620494e-16,4.243637805093078e-16,4.262273504347798e-16,4.2810473700531167e-16,4.2999635591638323e-16,4.3190263810026294e-16,4.338240305622791e-16,4.357609972736849e-16,4.3771402012585875e-16,4.3968359995105214e-16,4.4167025761542035e-16,4.4367453519065673e-16,4.456969972112043e-16,4.477382320247534e-16,4.49798853244555e-16,4.518795013130059e-16,4.539808451870034e-16,4.561035841567422e-16,4.582484498109567e-16,4.604162081631153e-16,4.626076619547846e-16,4.648236531543207e-16,4.670650656712631e-16,4.693328283093329e-16,4.716279179838351e-16,4.739513632325867e-16,4.763042480533137e-16,4.786877161048723e-16,4.811029753147417e-16,4.835513029411525e-16,4.860340511450812e-16,4.885526531353603e-16,4.91108629959527e-16,4.937035980240335e-16,4.963392774403987e-16,4.990175013091822e-16,5.017402260718089e-16,5.045095430818727e-16,5.073276915733542e-16,5.101970732341562e-16,5.131202686306784e-16,5.161000557743228e-16,5.191394311757699e-16,5.222416338000234e-16,5.254101724177597e-16,5.286488569504945e-16,5.3196183453384e-16,5.353536311816497e-16,5.388292001334053e-16,5.423939782201712e-16,5.46053951907478e-16,5.498157350892814e-16,5.536866612467876e-16,5.576748932926576e-16,5.617895553555417e-16,5.660408920082422e-16,5.704404621291389e-16,5.750013768919895e-16,5.797385945724594e-16,5.846692893455479e-16,5.898133176477899e-16,5.951938149641444e-16,6.008379696271908e-16,6.067780409333449e-16,6.130527208725282e-16,6.197089894581626e-16,6.268046963301284e-16,6.344122407127506e-16,6.426239659548055e-16,6.515603317344994e-16,6.613827885097664e-16,6.723150462505587e-16,6.846803417564259e-16,6.98971833638762e-16,7.159994934830664e-16,7.372424301798799e-16,7.658936370805573e-16,8.113849337656484e-16],
+ fi: [1.0,0.9771017012676716,0.9598790918001067,0.9451989534422996,0.9320600759592305,0.919991505039347,0.9087264400521309,0.8980959218983434,0.8879846607558334,0.8783096558089174,0.869008688036857,0.8600336211963315,0.851346258458678,0.8429156531122042,0.8347162929868834,0.8267268339462214,0.8189291916037024,0.8113078743126563,0.8038494831709643,0.796542330422959,0.7893761435660246,0.7823418326548025,0.7754313049811872,0.7686373157984863,0.7619533468367954,0.7553735065070961,0.7488924472191568,0.742505296340151,0.7362075981268627,0.7299952645614762,0.7238645334686302,0.717811932630722,0.7118342488782484,0.7059285013327543,0.7000919181365116,0.6943219161261167,0.6886160830046718,0.6829721616449949,0.6773880362187735,0.6718617198970821,0.6663913439087501,0.6609751477766631,0.6556114705796973,0.6502987431108167,0.6450354808208223,0.6398202774530566,0.6346517992876236,0.6295287799248367,0.6244500155470265,0.6194143606058343,0.6144207238889139,0.6094680649257734,0.6045553906974678,0.5996817526191253,0.5948462437679874,0.590047996332826,0.5852861792633715,0.5805599961007909,0.5758686829723537,0.5712115067352532,0.5665877632561644,0.5619967758145243,0.557437893618766,0.5529104904258323,0.5484139632552658,0.5439477311900263,0.5395112342569521,0.5351039323804576,0.5307253044036621,0.5263748471716845,0.5220520746723218,0.5177565172297564,0.513487720747327,0.5092452459957479,0.5050286679434681,0.5008375751261487,0.4966715690524897,0.49253026364386854,0.48841328470545803,0.4843202694266833,0.48025086590904675,0.47620473271950586,0.4721815384677302,0.4681809614056936,0.46420268904817436,0.46024641781284287,0.45631185267871643,0.4523987068618485,0.44850670150720306,0.4446355653957394,0.440785034665804,0.43695485254798555,0.43314476911265226,0.4293545410294414,0.42558393133802197,0.4218327092294959,0.4181006498378482,0.4143875340408911,0.41069314827018816,0.40701728432947337,0.4033597392211145,0.3997203149801972,0.39609881851583245,0.3924950614593156,0.3889088600187887,0.3853400348400773,0.38178841087339366,0.3782538172456192,0.37473608713789114,0.3712350576682395,0.3677505697790326,0.36428246812900406,0.36083060098964803,0.3573948201457805,0.3539749808000768,0.3505709414814061,0.34718256395679364,0.3438097131468507,0.34045225704452187,0.33711006663700605,0.33378301583071845,0.3304709813791636,0.3271738428136014,0.3238914823763911,0.32062378495690536,0.3173706380299136,0.3141319315963372,0.3109075581262865,0.30769741250429206,0.30450139197665,0.30131939610080305,0.2981513266966855,0.2949970877999618,0.2918565856170952,0.2887297284821829,0.28561642681550176,0.2825165930837076,0.27943014176163794,0.2763569892956683,0.27329705406857707,0.27025025636587546,0.26721651834356147,0.2641957639972612,0.2611879191327212,0.25819291133761924,0.25521066995466196,0.2522411260559422,0.24928421241852852,0.24633986350126383,0.2434080154227503,0.2404886059405006,0.2375815744312381,0.23468686187233,0.23180441082433872,0.22893416541468034,0.22607607132238028,0.22323007576391748,0.220396127480152,0.21757417672433113,0.21476417525117358,0.21196607630703018,0.20917983462112508,0.2064054063978808,0.2036427493103349,0.2008918224946566,0.19815258654577514,0.1954250035141343,0.19270903690358918,0.19000465167046499,0.1873118142238003,0.18463049242679927,0.18196065559952251,0.17930227452284758,0.17665532144373486,0.17401977008183855,0.17139559563750575,0.1687827748012113,0.1661812857644819,0.16359110823236558,0.161012223437511,0.15844461415592428,0.1558882647244792,0.15334316106026286,0.15080929068184568,0.14828664273257455,0.14577520800599403,0.14327497897351346,0.1407859498144447,0.13830811644855073,0.13584147657125376,0.13338602969166916,0.13094177717364436,0.12850872227999957,0.1260868702201859,0.12367622820159657,0.1212768054847903,0.11888861344291006,0.11651166562561087,0.11414597782783849,0.11179156816383809,0.1094484571468118,0.1071166677746838,0.10479622562248707,0.10248715894193525,0.10018949876881002,0.09790327903886246,0.095628536713009,0.09336531191269101,0.09111364806637376,0.08887359206827589,0.08664519445055807,0.08442850957035347,0.0822235958132029,0.08003051581466307,0.07784933670209612,0.07568013035892718,0.07352297371398132,0.0713779490588904,0.06924514439700676,0.0671246538277885,0.0650165779712429,0.06292102443775814,0.06083810834953988,0.05876795292093374,0.0567106901062029,0.05466646132488892,0.05263541827679219,0.05061772386094778,0.04861355321586854,0.04662309490193038,0.044646552251294463,0.04268414491647446,0.04073611065594094,0.03880270740452615,0.036884215688567305,0.034980941461716125,0.03309321945857858,0.0312214171919203,0.02936593975813336,0.027527235669603113,0.02570580400854891,0.02390220330579588,0.02211706270730885,0.02035109623004451,0.018605121275724622,0.016880083152543142,0.01517708830793531,0.013497450601739867,0.011842757857907879,0.010214971439701459,0.008616582769398726,0.007050875471373222,0.0055224032992509916,0.0040379725933630236,0.0026090727461021593,0.001260285930498598],
+ we: [9.655740063209183e-16,7.089014243955414e-18,1.1639412496691224e-17,1.524391512353216e-17,1.833284885723744e-17,2.1089651094644866e-17,2.3611280778431382e-17,2.595595772310894e-17,2.8161735541977523e-17,3.0255041303213823e-17,3.225508254836375e-17,3.417632340185027e-17,3.6029969787344525e-17,3.782490776869649e-17,3.956832198097553e-17,4.1266117781759464e-17,4.2923218084425256e-17,4.4543777432823714e-17,4.613133981483186e-17,4.768895725264636e-17,4.921928043727963e-17,5.072462904503147e-17,5.220704702792672e-17,5.366834661718192e-17,5.511014372835095e-17,5.653388673239667e-17,5.794088004852767e-17,5.933230365208943e-17,6.07092293284718e-17,6.207263431163193e-17,6.342341280303077e-17,6.476238575956142e-17,6.609030925769405e-17,6.740788167872722e-17,6.871574991183812e-17,7.00145147340393e-17,7.130473549660643e-17,7.258693422414648e-17,7.386159921381792e-17,7.512918820723728e-17,7.639013119550826e-17,7.764483290797848e-17,7.88936750272979e-17,8.013701816675454e-17,8.137520364041762e-17,8.260855505210038e-17,8.383737972539139e-17,8.506196999385323e-17,8.628260436784113e-17,8.749954859216183e-17,8.871305660690252e-17,8.992337142215357e-17,9.113072591597909e-17,9.233534356381788e-17,9.353743910649129e-17,9.47372191631295e-17,9.593488279457997e-17,9.713062202221521e-17,9.832462230649511e-17,9.951706298915072e-17,1.0070811770242949e-16,1.0189795474846941e-16,1.030867374515422e-16,1.0427462448561886e-16,1.0546177017945764e-16,1.0664832480119147e-16,1.0783443482419485e-16,1.0902024317583505e-16,1.1020588947055781e-16,1.1139151022861975e-16,1.1257723908165675e-16,1.1376320696616847e-16,1.1494954230590093e-16,1.1613637118402183e-16,1.1732381750590458e-16,1.1851200315326694e-16,1.1970104813034652e-16,1.2089107070273855e-16,1.2208218752947062e-16,1.2327451378884152e-16,1.2446816329851125e-16,1.2566324863028985e-16,1.2685988122003975e-16,1.2805817147307494e-16,1.2925822886541196e-16,1.3046016204120288e-16,1.3166407890665726e-16,1.328700867207381e-16,1.3407829218289994e-16,1.3528880151811755e-16,1.3650172055943978e-16,1.377171548282881e-16,1.389352096127064e-16,1.4015599004375715e-16,1.4137960117024852e-16,1.4260614803196654e-16,1.4383573573157902e-16,1.4506846950536877e-16,1.4630445479294757e-16,1.4754379730609516e-16,1.487866030968626e-16,1.500329786250737e-16,1.5128303082535394e-16,1.5253686717381255e-16,1.537945957544997e-16,1.5505632532575771e-16,1.5632216538658375e-16,1.5759222624311761e-16,1.5886661907536842e-16,1.6014545600429167e-16,1.6142885015932787e-16,1.6271691574651305e-16,1.640097681172718e-16,1.653075238380037e-16,1.666103007605742e-16,1.6791821809382289e-16,1.6923139647620223e-16,1.7054995804966298e-16,1.7187402653490317e-16,1.7320372730810084e-16,1.745391874792534e-16,1.7588053597224914e-16,1.7722790360680065e-16,1.7858142318237326e-16,1.7994122956424637e-16,1.8130745977185016e-16,1.8268025306952523e-16,1.8405975105985878e-16,1.8544609777975695e-16,1.8683943979941927e-16,1.882399263243892e-16,1.8964770930086167e-16,1.9106294352443765e-16,1.9248578675252438e-16,1.9391639982058994e-16,1.9535494676249091e-16,1.9680159493510374e-16,1.982565151475019e-16,1.997198817949342e-16,2.0119187299787347e-16,2.0267267074641983e-16,2.0416246105035888e-16,2.0566143409519179e-16,2.071697844044737e-16,2.0868771100881597e-16,2.1021541762192928e-16,2.117531128241076e-16,2.133010102535779e-16,2.1485932880616633e-16,2.1642829284376047e-16,2.180081324120784e-16,2.1959908346828707e-16,2.212013881190496e-16,2.2281529486961805e-16,2.2444105888463086e-16,2.2607894226131737e-16,2.277292143158621e-16,2.2939215188373114e-16,2.3106803963482133e-16,2.3275717040435346e-16,2.344598455404958e-16,2.361763752697774e-16,2.3790707908142767e-16,2.3965228613186235e-16,2.4141233567062933e-16,2.431875774892256e-16,2.44978372394307e-16,2.4678509270692887e-16,2.4860812278958517e-16,2.504478596029557e-16,2.523047132944217e-16,2.541791078205812e-16,2.560714816061771e-16,2.579822882420531e-16,2.599119972249747e-16,2.618610947423924e-16,2.638300845054943e-16,2.658194886341845e-16,2.678298485979525e-16,2.698617262169489e-16,2.7191570472798185e-16,2.739923899205815e-16,2.760924113487617e-16,2.782164236246436e-16,2.8036510780069835e-16,2.825391728480253e-16,2.847393572388174e-16,2.8696643064198177e-16,2.8922119574179956e-16,2.915044901905293e-16,2.9381718870700286e-16,2.9616020533454657e-16,2.9853449587300453e-16,3.009410605012618e-16,3.0338094660850034e-16,3.058552518544861e-16,3.08365127481531e-16,3.1091178190342663e-16,3.134964845996663e-16,3.1612057034671057e-16,3.187854438219713e-16,3.2149258462067974e-16,3.2424355273094516e-16,3.2703999451822404e-16,3.298836492772283e-16,3.3277635641716714e-16,3.357200633553244e-16,3.387168342045505e-16,3.417688593525637e-16,3.448784660453424e-16,3.4804813010374423e-16,3.5128048892229794e-16,3.545783559224792e-16,3.5794473666042765e-16,3.6138284682190606e-16,3.6489613237645425e-16,3.6848829220956213e-16,3.7216330360802073e-16,3.7592545104162565e-16,3.7977935876688744e-16,3.8373002787892137e-16,3.8778287856078953e-16,3.919437984311429e-16,3.962191980786775e-16,4.0061607510565417e-16,4.051420882956573e-16,4.0980564389030625e-16,4.1461599642909046e-16,4.195833672073399e-16,4.247190841824385e-16,4.3003574816674707e-16,4.355474314693952e-16,4.41269916903607e-16,4.472209874259932e-16,4.534207798565834e-16,4.598922204905932e-16,4.666615664711476e-16,4.737590853262492e-16,4.812199172829238e-16,4.89085182739221e-16,4.97403423619194e-16,5.06232507214416e-16,5.156421828878083e-16,5.257175802022275e-16,5.365640977112022e-16,5.483144034258704e-16,5.61138745467516e-16,5.752606481503332e-16,5.909817641652103e-16,6.087231416180908e-16,6.290979034877557e-16,6.530492053564041e-16,6.821393079028929e-16,7.192444966089362e-16,7.706095350032097e-16,8.545517038584027e-16],
+ fe: [1.0,0.9381436808621747,0.9004699299257465,0.8717043323812036,0.8477855006239896,0.8269932966430503,0.8084216515230084,0.7915276369724956,0.7759568520401156,0.7614633888498963,0.7478686219851951,0.7350380924314235,0.722867659593572,0.711274760805076,0.7001926550827882,0.689566496117078,0.6793505722647654,0.6695063167319247,0.6600008410789997,0.6508058334145711,0.6418967164272661,0.6332519942143661,0.624852738703666,0.6166821809152077,0.608725382079622,0.6009689663652322,0.5934009016917334,0.586010318477268,0.578787358602845,0.5717230486648258,0.5648091929124002,0.5580382822625874,0.5514034165406413,0.5448982376724396,0.5385168720028619,0.5322538802630433,0.5261042139836197,0.5200631773682336,0.5141263938147486,0.5082897764106429,0.5025495018413477,0.49690198724154955,0.49134386959403253,0.4858719873418849,0.4804833639304542,0.4751751930373774,0.46994482528396,0.4647897562504262,0.4597076156421377,0.4546961574746155,0.449753251162755,0.4448768734145485,0.4400651008423539,0.4353161032156366,0.43062813728845883,0.42599954114303434,0.4214287289976166,0.4169141864330029,0.4124544659971612,0.4080481831520324,0.4036940125305303,0.3993906844752311,0.39513698183329016,0.3909317369847971,0.38677382908413765,0.38266218149600983,0.3785957594095808,0.37457356761590216,0.370594648435146,0.36665807978151416,0.3627629733548178,0.3589084729487498,0.35509375286678746,0.35131801643748334,0.347580494621637,0.3438804447045024,0.34021714906678,0.3365899140286776,0.332998068761809,0.3294409642641363,0.3259179723935562,0.32242848495608917,0.31897191284495724,0.31554768522712895,0.31215524877417955,0.3087940669345602,0.30546361924459026,0.3021634006756935,0.2988929210155818,0.2956517042812612,0.2924392881618926,0.28925522348967775,0.2860990737370768,0.28297041453878075,0.2798688332369729,0.27679392844851736,0.27374530965280297,0.27072259679906,0.2677254199320448,0.2647534188350622,0.261806242689363,0.25888354974901623,0.2559850070304154,0.25311029001562946,0.2502590823688623,0.24743107566532763,0.2446259691318921,0.24184346939887721,0.23908329026244918,0.23634515245705964,0.23362878343743335,0.2309339171696274,0.2282602939307167,0.22560766011668407,0.2229757680581202,0.2203643758433595,0.21777324714870053,0.21520215107537868,0.21265086199297828,0.21011915938898826,0.20760682772422204,0.2051136562938377,0.20263943909370902,0.20018397469191127,0.19774706610509887,0.19532852067956322,0.19292814997677135,0.1905457696631954,0.18818119940425432,0.1858342627621971,0.18350478709776746,0.1811926034754963,0.1788975465724783,0.17661945459049488,0.1743581691713535,0.17211353531532006,0.16988540130252766,0.1676736186172502,0.165478041874936,0.16329852875190182,0.16113493991759203,0.1589871389693142,0.15685499236936523,0.15473836938446808,0.15263714202744286,0.1505511850010399,0.1484803756438668,0.14642459387834494,0.14438372216063478,0.1423576454324722,0.14034625107486245,0.1383494288635802,0.13636707092642886,0.13439907170221363,0.13244532790138752,0.13050573846833077,0.12858020454522817,0.12666862943751067,0.12477091858083096,0.12288697950954514,0.12101672182667483,0.11916005717532768,0.11731689921155557,0.11548716357863353,0.11367076788274431,0.1118676316700563,0.11007767640518538,0.1083008254510338,0.10653700405000166,0.10478613930657017,0.10304816017125772,0.10132299742595363,0.09961058367063713,0.0979108533114922,0.0962237425504328,0.09454918937605586,0.09288713355604354,0.09123751663104016,0.08960028191003286,0.08797537446727022,0.08636274114075691,0.08476233053236812,0.08317409300963238,0.08159798070923742,0.0800339475423199,0.07848194920160642,0.0769419431704805,0.07541388873405841,0.07389774699236475,0.07239348087570874,0.07090105516237183,0.06942043649872875,0.0679515934219366,0.06649449638533977,0.06504911778675375,0.06361543199980733,0.062193415408540995,0.06078304644547963,0.059384305633420266,0.05799717563120066,0.05662164128374288,0.05525768967669704,0.05390531019604609,0.05256449459307169,0.05123523705512628,0.04991753428270637,0.0486113855733795,0.04731679291318155,0.04603376107617517,0.04476229773294328,0.04350241356888818,0.042254122413316234,0.04101744138041482,0.039792391023374125,0.03857899550307486,0.03737728277295936,0.03618728478193142,0.03500903769739741,0.03384258215087433,0.032687963508959535,0.03154523217289361,0.030414443910466604,0.029295660224637393,0.028188948763978636,0.0270943837809558,0.026012046645134217,0.024942026419731783,0.02388442051155817,0.02283933540638524,0.02180688750428358,0.020787204072578117,0.019780424338009743,0.01878670074469603,0.01780620041091136,0.016839106826039948,0.015885621839973163,0.014945968011691148,0.014020391403181938,0.013109164931254991,0.012212592426255381,0.011331013597834597,0.010464810181029979,0.00961441364250221,0.008780314985808975,0.00796307743801704,0.007163353183634984,0.006381905937319179,0.005619642207205483,0.004877655983542392,0.004157295120833795,0.003460264777836904,0.002788798793574076,0.0021459677437189063,0.0015362997803015724,0.0009672692823271745,0.00045413435384149677],
+ nor_r: 3.654152885361009, nor_inv_r: 0.2736612373297583, exp_r: 7.69711747013105
+};
+
+/* numpy.random.default_rng(seed) in JavaScript — SeedSequence → PCG64 (XSL-RR) and the Generator methods the simulator uses
+   (normal · uniform · random · integers · choice(p) · permutation · dirichlet), following numpy's C code so the same seed
+   gives the same numbers as the Python app. */
+const NPRNG = (() => {
+  const M64 = (1n << 64n) - 1n, M128 = (1n << 128n) - 1n, MULT = 0x2360ED051FC65DA44385DF649FCCF645n;
+  const INIT_A = 0x43b0d7e5, MULT_A = 0x931e8875, INIT_B = 0x8b51f9dd, MULT_B = 0x58f38ded, MIX_L = 0xca01f9dd, MIX_R = 0x4973f715;
+  function seedState(seed) {
+    const ent = []; let n = BigInt(seed);
+    if (n === 0n) ent.push(0); while (n > 0n) { ent.push(Number(n & 0xFFFFFFFFn)); n >>= 32n; }
+    let hc = INIT_A;
+    const hashmix = v => { v = (v ^ hc) >>> 0; hc = Math.imul(hc, MULT_A) >>> 0; v = Math.imul(v, hc) >>> 0; return (v ^ (v >>> 16)) >>> 0; };
+    const mix = (x, y) => { const r = (Math.imul(MIX_L, x) - Math.imul(MIX_R, y)) >>> 0; return (r ^ (r >>> 16)) >>> 0; };
+    const pool = [0, 0, 0, 0];
+    for (let i = 0; i < 4; i++) pool[i] = hashmix(i < ent.length ? ent[i] : 0);
+    for (let s = 0; s < 4; s++) for (let d = 0; d < 4; d++) if (s !== d) pool[d] = mix(pool[d], hashmix(pool[s]));
+    for (let s = 4; s < ent.length; s++) for (let d = 0; d < 4; d++) pool[d] = mix(pool[d], hashmix(ent[s]));
+    let hb = INIT_B; const w = [];
+    for (let i = 0; i < 8; i++) { let v = (pool[i % 4] ^ hb) >>> 0; hb = Math.imul(hb, MULT_B) >>> 0; v = Math.imul(v, hb) >>> 0; w.push((v ^ (v >>> 16)) >>> 0); }
+    return [0, 1, 2, 3].map(k => (BigInt(w[2 * k + 1]) << 32n) | BigInt(w[2 * k]));
+  }
+  class Gen {
+    constructor(seed) {
+      const v = seedState(seed), initstate = (v[0] << 64n) | v[1], initseq = (v[2] << 64n) | v[3];
+      this.inc = ((initseq << 1n) | 1n) & M128; this.st = 0n; this.step(); this.st = (this.st + initstate) & M128; this.step();
+      this.has32 = false; this.u32 = 0; this.hi = 0; this.lo = 0;
+    }
+    step() { this.st = (this.st * MULT + this.inc) & M128; }
+    next64() {                                     // leaves the 64-bit output in this.hi / this.lo (unsigned 32-bit numbers)
+      this.step();
+      const s = this.st, x = (s >> 64n) ^ (s & M64), rot = BigInt(Number(s >> 122n));
+      const r = ((x >> rot) | (x << ((64n - rot) & 63n))) & M64;
+      this.hi = Number(r >> 32n); this.lo = Number(r & 0xFFFFFFFFn);
+    }
+    next32() { if (this.has32) { this.has32 = false; return this.u32; } this.next64(); this.has32 = true; this.u32 = this.hi; return this.lo; }
+    random() { this.next64(); return (this.hi * 2097152 + (this.lo >>> 11)) * 1.1102230246251565e-16; }
+    stdNormal() {
+      for (;;) {
+        this.next64();
+        const hi = this.hi, lo = this.lo, idx = lo & 0xff, sign = (lo >>> 8) & 1;
+        const rabs = (hi & 0x1FFFFFFF) * 8388608 + (lo >>> 9);
+        const x = rabs * ZIG.wi[idx] * (sign ? -1 : 1);
+        if (rabs < ZIG.ki[idx]) return x;
+        if (idx === 0) {
+          for (;;) {
+            const xx = -ZIG.nor_inv_r * Math.log1p(-this.random()), yy = -Math.log1p(-this.random());
+            if (yy + yy > xx * xx) return ((lo >>> 17) & 1) ? -(ZIG.nor_r + xx) : ZIG.nor_r + xx;
+          }
+        } else if ((ZIG.fi[idx - 1] - ZIG.fi[idx]) * this.random() + ZIG.fi[idx] < Math.exp(-.5 * x * x)) return x;
+      }
+    }
+    stdExp() {
+      for (;;) {
+        this.next64();
+        const idx = (this.lo >>> 3) & 0xff, ri = this.hi * 2097152 + (this.lo >>> 11), x = ri * ZIG.we[idx];
+        if (ri < ZIG.ke[idx]) return x;
+        if (idx === 0) return ZIG.exp_r - Math.log1p(-this.random());
+        if ((ZIG.fe[idx - 1] - ZIG.fe[idx]) * this.random() + ZIG.fe[idx] < Math.exp(-x)) return x;
+      }
+    }
+    stdGamma(shape) {
+      if (shape === 1) return this.stdExp();
+      if (shape === 0) return 0;
+      if (shape < 1) {
+        for (;;) {
+          const U = this.random(), V = this.stdExp();
+          if (U <= 1 - shape) { const X = Math.pow(U, 1 / shape); if (X <= V) return X; }
+          else { const Y = -Math.log((1 - U) / shape), X = Math.pow(1 - shape + shape * Y, 1 / shape); if (X <= V + Y) return X; }
+        }
+      }
+      const b = shape - 1 / 3, c = 1 / Math.sqrt(9 * b);
+      for (;;) {
+        let X, V; do { X = this.stdNormal(); V = 1 + c * X; } while (V <= 0);
+        V = V * V * V; const U = this.random();
+        if (U < 1 - .0331 * (X * X) * (X * X)) return b * V;
+        if (Math.log(U) < .5 * X * X + b * (1 - V + Math.log(V))) return b * V;
+      }
+    }
+    normal(loc = 0, scale = 1) { return loc + scale * this.stdNormal(); }
+    uniform(a, b) { return a + (b - a) * this.random(); }
+    integers(n) {                                  // Generator.integers(n): Lemire on 32-bit draws
+      const rng = n - 1; if (rng === 0) return 0;
+      const ex = rng + 1;
+      let m = this.next32() * ex, left = m % 4294967296;
+      if (left < ex) { const th = (4294967295 - rng) % ex; while (left < th) { m = this.next32() * ex; left = m % 4294967296; } }
+      return Math.floor(m / 4294967296);
+    }
+    interval(max) {                                // random_interval (masked rejection, 32-bit)
+      if (max === 0) return 0;
+      let mask = max; mask |= mask >>> 1; mask |= mask >>> 2; mask |= mask >>> 4; mask |= mask >>> 8; mask |= mask >>> 16; mask >>>= 0;
+      let v; while ((v = (this.next32() & mask) >>> 0) > max); return v;
+    }
+    perm(n) { const a = new Int32Array(n); for (let i = 0; i < n; i++) a[i] = i; for (let i = n - 1; i >= 1; i--) { const j = this.interval(i); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+    choice(p) {                                    // choice(len(p), p=p): cumsum / last, searchsorted(side='right')
+      const cdf = new Float64Array(p.length); let s = 0; for (let i = 0; i < p.length; i++) { s += p[i]; cdf[i] = s; }
+      const last = cdf[p.length - 1]; for (let i = 0; i < p.length; i++) cdf[i] /= last;
+      const u = this.random(); let k = 0; while (k < cdf.length && cdf[k] <= u) k++; return k;
+    }
+    dirichlet(al) { const g = al.map(a => this.stdGamma(a)); let acc = 0; for (const v of g) acc += v; const inv = 1 / acc; return g.map(v => v * inv); }
+  }
+  return Gen;
+})();
+
+/* ===== FocusGuard AI v6 — simulation core, ported from focusguard_ai.py (numpy → typed arrays) ===== */
+'use strict';
+const H_MAX = 1000, DT = 4, WIN = 10, K_RATE = 1.5;
+const MATERIALS = {
+  SiC:         { label: 'CVD SiC',       ys: .45, yc: .30, price: 4500000, color: '#3a7a71' },
+  Si:          { label: 'Si',            ys: 1.0, yc: 1.0, price: 1800000, color: '#677489' },
+  Quartz:      { label: 'Quartz (SiO2)', ys: .75, yc: 2.4, price: 900000,  color: '#b9692f' },
+  Anodized_Al: { label: '양극산화 Al',   ys: .55, yc: .40, price: 2200000, color: '#7c5ce0' },
+};
+const MAT_KEYS = ['SiC', 'Si', 'Quartz'];
+const EXTRA_MATERIALS = {
+  Anodized_Al: { label: '양극산화 Al', base_rate: .70, price: 2200000 },
+  Al2O3:       { label: 'Al₂O₃',       base_rate: .55, price: 3800000 },
+  Al:          { label: 'Al',          base_rate: 1.10, price: 1200000 },
+  PEEK:        { label: 'PEEK',        base_rate: .45, price: 2800000 },
+  PPS:         { label: 'PPS',         base_rate: .65, price: 2400000 },
+  PEEK_PI:     { label: 'PEEK+PI',     base_rate: .38, price: 3500000 },
+};
+const ALL_MATERIALS = { ...MATERIALS, ...EXTRA_MATERIALS };
+const RING_TYPE_LABEL = { focus_ring: '포커스링', cover_ring: '커버링', edge_ring: '엣지링', shadow_ring: '쉐도우링', retainer_ring: '리테이너링' };
+const EQUIPMENT_TYPE_LABEL = { etch: '식각(Etch)', cvd_ald_pvd: '증착(CVD)', cmp: 'CMP' };
+// 레시피: (RF 전력 W, 압력 mTorr, CF4 비율, O2 비율) — 산화막 / 질화막 / 폴리실리콘 / 고종횡비 컨택 / 애싱·클린
+const RECIPES = [[1800, 30, .60, .10], [1400, 45, .45, .15], [900, 15, .20, .05], [2800, 20, .70, .05], [600, 80, .10, .60]];
+const FL_REAL = { q: 1.18, off: [10.0, .25, .4] }, FL_SCALE = 1000;
+const NF = 14;                                     // AI 입력 특성 수
+
+const clip = (v, a, b) => Math.min(b, Math.max(a, v));
+const mean = a => { let s = 0; for (const v of a) s += v; return a.length ? s / a.length : 0; };
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+/* numpy.random.default_rng — see npy_rng.js (same seeds → same numbers as the Python app) */
+const RNG = NPRNG;
+
+/* ---------- 1. 물리 기반 포커스링 마모 시뮬레이터 */
+function erosionRate(mat, P, p, cf4, o2, h = 0, q = 1) {
+  const m = MATERIALS[mat];
+  const flux = Math.pow(P / 1500, .8) * Math.pow(30 / p, .25);
+  const energy = Math.pow(P / 1500, .5) * Math.pow(30 / p, .3);
+  const sputter = m.ys * flux * Math.sqrt(energy);
+  const fluorine = cf4 * Math.pow(P / 1500, .6) * (1 + 1.5 * o2) * Math.pow(p / 30, .2);
+  return K_RATE * q * (.55 * sputter + .45 * m.yc * fluorine) * (1 + .35 * h / H_MAX);
+}
+function sensors(rng, mat, P, p, cf4, o2, h, rate, off) {
+  const f = Math.min(h / H_MAX, 1.6);
+  const vdc = -220 * Math.pow(P / 1500, .5) * Math.pow(30 / p, .3) * (1 + .06 * f) + rng.normal(0, 4) + off[0];
+  const refl = .8 + 2.8 * Math.pow(f, 1.6) + .15 * P / 1500 + rng.normal(0, .12) + off[1];
+  const oes = (.35 + .22 * rate) * (1 + .5 * f) + rng.normal(0, .03);
+  const edge = .6 + 5.5 * Math.pow(f, 1.4) + rng.normal(0, .25) + off[2];
+  return [vdc, refl, oes, edge];
+}
+function newRing(rng, mat, mix) {
+  const m = mat || MAT_KEYS[rng.integers(MAT_KEYS.length)];
+  const mx = mix || rng.dirichlet([.6, .6, .6, .6, .6]);
+  const q = clip(rng.normal(1, .10), .75, 1.3);
+  const offset = [rng.normal(0, 6), rng.normal(0, .1), rng.normal(0, .2)];
+  return { mat: m, mix: mx, q, offset };
+}
+function flRealRing(rng, mat, mx) {
+  const r = newRing(rng, mat, mx);
+  r.q *= FL_REAL.q; r.offset = r.offset.map((o, i) => o + FL_REAL.off[i]);
+  r.mix = rng.dirichlet(mx.map(v => v * 30 + .05));
+  return r;
+}
+const KEYS = ['t', 'h', 'rid', 'P', 'p', 'cf4', 'o2', 'vdc', 'refl', 'oes', 'edge'];
+function simulateLife(rng, ring, over = 1.4) {
+  const cols = KEYS.map(() => []); let h = 0, t = 0, life = null;
+  while (h < over * H_MAX) {
+    const r = rng.choice(ring.mix), [P, p, cf4, o2] = RECIPES[r];
+    const rate = erosionRate(ring.mat, P, p, cf4, o2, h, ring.q);
+    const s = sensors(rng, ring.mat, P, p, cf4, o2, h, rate, ring.offset);
+    const row = [t, h, r, P, p, cf4, o2, s[0], s[1], s[2], s[3]];
+    for (let i = 0; i < 11; i++) cols[i].push(row[i]);
+    const hn = h + rate * DT;
+    if (life === null && hn >= H_MAX) life = t + DT * (H_MAX - h) / (hn - h);
+    h = hn; t += DT;
+  }
+  const d = { life, mat: ring.mat, n: cols[0].length };
+  KEYS.forEach((k, i) => { d[k] = Float64Array.from(cols[i]); });
+  return d;
+}
+
+/* 시점 k 의 AI 입력 특성 14개 (최근 WIN 스텝) → out[o..o+14) */
+function features(d, k, out, o = 0) {
+  const s = k - WIN + 1;
+  out[o] = d.mat === 'SiC' ? 1 : 0; out[o + 1] = d.mat === 'Si' ? 1 : 0; out[o + 2] = d.mat === 'Quartz' ? 1 : 0;
+  out[o + 3] = d.t[k] / 1000;
+  let P = 0, p = 0, c = 0, o2 = 0, v = 0, r = 0, g = 0, e = 0, tm = 0;
+  for (let i = s; i <= k; i++) { P += d.P[i]; p += d.p[i]; c += d.cf4[i]; o2 += d.o2[i]; v += d.vdc[i]; r += d.refl[i]; g += d.oes[i]; e += d.edge[i]; tm += d.t[i]; }
+  const n = WIN; r /= n; e /= n; tm /= n;
+  out[o + 4] = P / n / 1000; out[o + 5] = p / n / 50; out[o + 6] = c / n; out[o + 7] = o2 / n;
+  out[o + 8] = v / n / 100; out[o + 9] = r; out[o + 10] = g / n; out[o + 11] = e;
+  let sx = 0, sr = 0, se = 0;
+  for (let i = s; i <= k; i++) { const dx = d.t[i] - tm; sx += dx * dx; sr += dx * (d.refl[i] - r); se += dx * (d.edge[i] - e); }
+  out[o + 12] = sr / (sx + 1e-9) * 100; out[o + 13] = se / (sx + 1e-9) * 100;
+  return out;
+}
+/* 수명 라벨이 있는 시계열 → (X, y): 학습/검증 샘플 */
+function flXY(lives, step = 3) {
+  const rows = [], y = [];
+  for (const d of lives) for (let k = WIN - 1; k < d.n; k += step) { if (d.t[k] > d.life) break; rows.push([d, k]); y.push(d.life - d.t[k]); }
+  const X = new Float64Array(rows.length * NF);
+  rows.forEach(([d, k], i) => features(d, k, X, i * NF));
+  return { X, y: Float64Array.from(y), n: rows.length };
+}
+function buildDataset(nLives, seed) {
+  const rng = new RNG(seed), lives = [];
+  for (let i = 0; i < nLives; i++) lives.push(simulateLife(rng, newRing(rng)));
+  return flXY(lives, 3);
+}
+function stats(X, n) {
+  const mu = new Float64Array(NF), sd = new Float64Array(NF);
+  for (let i = 0; i < n; i++) for (let j = 0; j < NF; j++) mu[j] += X[i * NF + j];
+  for (let j = 0; j < NF; j++) mu[j] /= n;
+  for (let i = 0; i < n; i++) for (let j = 0; j < NF; j++) { const d = X[i * NF + j] - mu[j]; sd[j] += d * d; }
+  for (let j = 0; j < NF; j++) sd[j] = Math.sqrt(sd[j] / n) + 1e-6;
+  return { mu, sd };
+}
+function normalize(X, n, mu, sd) { const o = new Float64Array(n * NF); for (let i = 0; i < n; i++) for (let j = 0; j < NF; j++) o[i * NF + j] = (X[i * NF + j] - mu[j]) / sd[j]; return o; }
+
+/* ---------- 2. AI 모델 — MLP (ReLU · Adam), numpy 구현과 같은 계산 */
+class MLP {
+  constructor(sizes, rng) {
+    this.sizes = sizes; this.W = []; this.b = [];
+    for (let l = 0; l < sizes.length - 1; l++) {
+      const a = sizes[l], b = sizes[l + 1], W = new Float64Array(a * b), s = Math.sqrt(2 / a);
+      for (let i = 0; i < a * b; i++) W[i] = rng.normal(0, s);
+      this.W.push(W); this.b.push(new Float64Array(b));
+    }
+    this.resetOpt();
+  }
+  resetOpt() { this.mW = this.W.map(w => new Float64Array(w.length)); this.vW = this.W.map(w => new Float64Array(w.length)); this.mb = this.b.map(w => new Float64Array(w.length)); this.vb = this.b.map(w => new Float64Array(w.length)); this.t = 0; }
+  clone() { const c = Object.create(MLP.prototype); c.sizes = this.sizes; c.W = this.W.map(w => w.slice()); c.b = this.b.map(w => w.slice()); c.resetOpt(); return c; }
+  forward(X, n, acts) {
+    let h = X; if (acts) acts.push(X);
+    const L = this.W.length;
+    for (let l = 0; l < L; l++) {
+      const a = this.sizes[l], b = this.sizes[l + 1], W = this.W[l], B = this.b[l], o = new Float64Array(n * b);
+      for (let i = 0; i < n; i++) {
+        const ho = i * a, oo = i * b;
+        for (let j = 0; j < b; j++) o[oo + j] = B[j];
+        for (let k = 0; k < a; k++) { const x = h[ho + k]; if (x === 0) continue; const wo = k * b; for (let j = 0; j < b; j++) o[oo + j] += x * W[wo + j]; }
+      }
+      if (l < L - 1) for (let i = 0; i < o.length; i++) if (o[i] < 0) o[i] = 0;
+      if (acts) acts.push(o);
+      h = o;
+    }
+    return h;                                        // n × 1
+  }
+  step(X, y, n, lr, wd = 1e-5) {
+    const acts = [], out = this.forward(X, n, acts), L = this.W.length;
+    let g = new Float64Array(n), mse = 0;
+    for (let i = 0; i < n; i++) { const e = out[i] - y[i]; mse += e * e; g[i] = 2 * e / n; }
+    const gW = new Array(L), gb = new Array(L);
+    for (let l = L - 1; l >= 0; l--) {
+      const a = this.sizes[l], b = this.sizes[l + 1], A = acts[l], W = this.W[l];
+      const GW = new Float64Array(a * b), GB = new Float64Array(b);
+      for (let i = 0; i < n; i++) {
+        const ao = i * a, go = i * b;
+        for (let j = 0; j < b; j++) GB[j] += g[go + j];
+        for (let k = 0; k < a; k++) { const x = A[ao + k]; if (x === 0) continue; const wo = k * b; for (let j = 0; j < b; j++) GW[wo + j] += x * g[go + j]; }
+      }
+      for (let i = 0; i < GW.length; i++) GW[i] += wd * W[i];
+      gW[l] = GW; gb[l] = GB;
+      if (l > 0) {
+        const gp = new Float64Array(n * a);
+        for (let i = 0; i < n; i++) { const go = i * b, po = i * a; for (let k = 0; k < a; k++) { if (A[po + k] <= 0) continue; let s = 0; const wo = k * b; for (let j = 0; j < b; j++) s += g[go + j] * W[wo + j]; gp[po + k] = s; } }
+        g = gp;
+      }
+    }
+    this.t++;
+    const c1 = 1 - Math.pow(.9, this.t), c2 = 1 - Math.pow(.999, this.t);
+    const upd = (P, G, M, V) => { for (let i = 0; i < P.length; i++) { const gr = G[i]; M[i] = .9 * M[i] + .1 * gr; V[i] = .999 * V[i] + .001 * gr * gr; P[i] -= lr * (M[i] / c1) / (Math.sqrt(V[i] / c2) + 1e-8); } };
+    for (let l = 0; l < L; l++) { upd(this.W[l], gW[l], this.mW[l], this.vW[l]); upd(this.b[l], gb[l], this.mb[l], this.vb[l]); }
+    return mse / n;
+  }
+}
+function predictNet(net, Xn, n) { const o = net.forward(Xn, n); const r = new Float64Array(n); for (let i = 0; i < n; i++) r[i] = Math.max(o[i], 0) * FL_SCALE; return r; }
+
+/* 미니배치 학습 — 화면이 멈추지 않도록 ~14ms 마다 양보 */
+async function trainNet(net, Xn, y, n, { epochs, lr, seed = 0, batch = 128, onEpoch, budget = 14 }) {
+  const rng = new RNG(seed), Xb = new Float64Array(batch * NF), yb = new Float64Array(batch);
+  let t0 = performance.now();
+  for (let ep = 0; ep < epochs; ep++) {
+    const p = rng.perm(n), tl = [];
+    for (let s = 0; s < n; s += batch) {
+      const m = Math.min(batch, n - s);
+      for (let i = 0; i < m; i++) { const r = p[s + i]; Xb.set(Xn.subarray(r * NF, r * NF + NF), i * NF); yb[i] = y[r] / FL_SCALE; }
+      tl.push(net.step(Xb.subarray(0, m * NF), yb.subarray(0, m), m, lr));
+      if (performance.now() - t0 > budget) { await tick(); t0 = performance.now(); }
+    }
+    if (onEpoch) onEpoch(ep + 1, epochs, mean(tl));
+  }
+  return net;
+}
+
+/* 물리 시뮬레이터 데이터로 사전학습한 v0 (원주 팹 데이터 0건) */
+class Lab {
+  async init(progress) {
+    progress(.05, '원주 실증센터 데이터 생성 (기관 내부에만 존재)'); await tick();
+    progress(.15, '강원 부품사 데이터 생성 (기관 내부에만 존재)'); await tick();
+    progress(.25, '팹 고객사 데이터 생성 (기관 내부에만 존재)'); await tick();
+    progress(.35, '공통 시험셋 생성 (모든 공정 조건의 실제 링 40개)'); await tick();
+    progress(.45, '물리 시뮬레이터 데이터 생성 (팹 데이터 0건)'); await tick();
+    const D = buildDataset(150, 5);
+    const { mu, sd } = stats(D.X, D.n); this.mu = mu; this.sd = sd;
+    progress(.55, '물리 모델 사전학습'); await tick();
+    const Xn = normalize(D.X, D.n, mu, sd);
+    this.phys = await trainNet(this.fresh(0), Xn, D.y, D.n, { epochs: 40, lr: 2e-3, batch: 128, onEpoch: (e, E) => progress(.55 + .45 * e / E, `물리 모델 사전학습 · epoch ${e}/${E}`) });
+    progress(1, '준비 완료');
+    return this;
+  }
+  fresh(seed = 0) { return new MLP([NF, 48, 24, 1], new RNG(seed)); }
+  norm1(f) { const o = new Float64Array(NF); for (let j = 0; j < NF; j++) o[j] = (f[j] - this.mu[j]) / this.sd[j]; return o; }
+}
+
+/* ---------- 원주 팹 실증 파이프라인: ① 수명 데이터 수집 → ② 재학습 → ③ 정확도 → ④ 가치 */
+class Pipeline {
+  async init(lab, specs, progress) {
+    this.lab = lab;
+    const rng = new RNG(2027);
+    progress(.1, '원주 팹 검증용 링 생성 (학습에는 사용하지 않음)'); await tick();
+    this.test = [];
+    for (let j = 0; j < 30; j++) { const [m, mx] = specs[j % specs.length]; this.test.push(simulateLife(rng, flRealRing(rng, m, mx))); }
+    const T = flXY(this.test, 4);
+    this.yt = T.y; this.nt = T.n; this.Xtn = normalize(T.X, T.n, lab.mu, lab.sd);
+    this.testF = this.test.map(d => { const n = d.n - (WIN - 1), X = new Float64Array(n * NF); for (let k = WIN - 1; k < d.n; k++) features(d, k, X, (k - WIN + 1) * NF); return { X: normalize(X, n, lab.mu, lab.sd), n }; });
+    this.fixed = {};
+    for (const m of MAT_KEYS) { const L = this.test.filter(d => d.mat === m).map(d => d.life); this.fixed[m] = percentile(L.length ? L : [500], 5); }
+    this.records = []; this.Xs = []; this.ys = []; this.versions = [];
+    progress(.7, 'v0 평가 (물리 모델만 · 원주 데이터 0건)'); await tick();
+    this.addVersion(this.evaluate(lab.phys.clone(), { n_rings: 0, n_samples: 0, loss: null, t_sim: 0, finetune: true }));
+    progress(1, '파이프라인 준비 완료');
+    return this;
+  }
+  get cur() { return this.versions[this.versions.length - 1]; }
+  nSamples() { let s = 0; for (const y of this.ys) s += y.length; return s; }
+  predictRaw(rows) { const n = rows.length, X = new Float64Array(n * NF); rows.forEach((f, i) => { for (let j = 0; j < NF; j++) X[i * NF + j] = (f[j] - this.lab.mu[j]) / this.lab.sd[j]; }); return predictNet(this.cur.net, X, n); }
+  evaluate(net, meta) {
+    const pred = predictNet(net, this.Xtn, this.nt), err = new Float64Array(this.nt); let ae = 0, hit = 0;
+    for (let i = 0; i < this.nt; i++) { err[i] = pred[i] - this.yt[i]; ae += Math.abs(err[i]); if (Math.abs(err[i]) <= 100) hit++; }
+    const traj = this.testF.map(F => predictNet(net, F.X, F.n));
+    return { net, mae: ae / this.nt, err, pred, traj, hit: hit / this.nt, ...meta };
+  }
+  addVersion(v) { v.no = this.versions.length; this.versions.push(v); }
+  addRecord(ch, tSim) {
+    const d = ch.arrays(); d.life = ch.trueLife;
+    const XY = flXY([d], 3);
+    const live = ch.pred.filter(p => p[0] <= ch.trueLife).map(p => Math.abs(p[1] - (ch.trueLife - p[0])));
+    const k0 = WIN - 1, f0 = this.lab.norm1(features(d, k0, new Float64Array(NF)));
+    const rec = { no: this.records.length + 1, chamber: ch.name, mat: ch.mat, ring: ch.ringType, life: ch.trueLife, samples: XY.n,
+      live_err: live.length ? mean(live) : null, version: this.cur.no, t_sim: tSim, phys_life: d.t[k0] + predictNet(this.lab.phys, f0, 1)[0] };
+    this.records.push(rec); this.Xs.push(XY.X); this.ys.push(XY.y);
+    return rec;
+  }
+  async train(epochs, finetune, tSim, onProgress) {
+    const lab = this.lab, nr = this.records.length;
+    let N = 0; for (const y of this.ys) N += y.length;
+    const X = new Float64Array(N * NF), y = new Float64Array(N); let o = 0;
+    this.Xs.forEach((x, i) => { X.set(x, o * NF); y.set(this.ys[i], o); o += this.ys[i].length; });
+    const net = finetune ? lab.phys.clone() : lab.fresh(nr), Xn = normalize(X, N, lab.mu, lab.sd);
+    const loss = { train: [], test: [] };
+    await trainNet(net, Xn, y, N, { epochs, lr: finetune ? 1e-3 : 2e-3, seed: nr, batch: 64, onEpoch: (e, E, l) => {
+      loss.train.push(Math.sqrt(l) * FL_SCALE);
+      const p = predictNet(net, this.Xtn, this.nt); let ae = 0; for (let i = 0; i < this.nt; i++) ae += Math.abs(p[i] - this.yt[i]);
+      loss.test.push(ae / this.nt); onProgress && onProgress(e / E);
+    } });
+    return this.evaluate(net, { n_rings: nr, n_samples: N, loss, t_sim: tSim, finetune });
+  }
+}
+function percentile(arr, q) { const a = Float64Array.from(arr).sort(), i = (a.length - 1) * q / 100, lo = Math.floor(i), hi = Math.ceil(i); return a[lo] + (a[hi] - a[lo]) * (i - lo); }
+
+/* 버전 v 를 검증 링에 적용 → 고정 주기 / AI 예측 교체 / 완벽 예측 연간 비용 */
+function policyCosts(pl, v, cfg, margin = 24, k = 1) {
+  const res = {};
+  for (const name of ['fixed', 'ai', 'oracle']) {
+    const used = [], waste = [], over = [], price = [];
+    pl.test.forEach((d, i) => {
+      const mu = v.traj[i], life = d.life, t0 = WIN - 1; let tr;
+      if (name === 'fixed') tr = pl.fixed[d.mat];
+      else if (name === 'ai') { let hit = -1; for (let j = 0; j < mu.length; j++) if (mu[j] - k * v.mae <= margin) { hit = j; break; } tr = hit >= 0 ? d.t[t0 + hit] : d.t[d.n - 1]; }
+      else tr = Math.max(life - margin, DT);
+      used.push(Math.min(tr, life)); waste.push(Math.max(life - tr, 0)); over.push(Math.max(tr - life, 0)); price.push(MATERIALS[d.mat].price);
+    });
+    const cyc = Math.max(mean(used.map((u, i) => u + over[i])), 1), nRep = cfg.hours / cyc * cfg.chambers;
+    const part = nRep * mean(price), down = nRep * cfg.pm_planned * cfg.down_cost;
+    const overH = mean(over) / cyc * cfg.hours * cfg.chambers, yld = overH * cfg.wph * cfg.wafer_value * cfg.yield_loss;
+    res[name] = { part, down, yld, total: part + down + yld, n_rep: nRep, util: 100 * mean(used.map((u, i) => u / (u + waste[i]))), over_rate: 100 * mean(over.map(o => o > 0 ? 1 : 0)) };
+  }
+  res.saving = res.fixed.total - res.ai.total; res.max_saving = res.fixed.total - res.oracle.total;
+  return res;
+}
+/* CVD/ALD/PVD · CMP 링: 고정 주기 vs 마모율 기준(80%) 교체 */
+function cvdCmpCosts(chambers, cfg, thr = 80) {
+  const ne = chambers.filter(c => !c.isEtch);
+  if (!ne.length) return { saving: 0 };
+  let ft = 0, tt = 0;
+  for (const ch of ne) {
+    const info = EXTRA_MATERIALS[ch.mat] || {}, br = info.base_rate || .6, price = info.price || 2500000, life = H_MAX / Math.max(br, .01);
+    for (const [tRep, isF] of [[life * .70, true], [H_MAX * thr / 100 / Math.max(br, .01), false]]) {
+      const n = cfg.hours / Math.max(tRep, 1), cost = n * price + n * cfg.pm_planned * cfg.down_cost;
+      if (isF) ft += cost; else tt += cost;
+    }
+  }
+  return { saving: Math.max(ft - tt, 0), fixed: ft, threshold: tt };
+}
+
+/* ---------- 원주 팹 챔버 (식각: 물리 모델 + 센서 / 증착 · CMP: 마모율만) */
+class Chamber {
+  constructor(name, mat, mix, rng, ringType, equip, real) {
+    Object.assign(this, { name, mat, mix, rng, ringType, equip, real, isEtch: equip === 'etch', replacements: 0 });
+    this.newRing();
+  }
+  newRing() {
+    if (this.isEtch) this.ring = this.real ? flRealRing(this.rng, this.mat, this.mix) : newRing(this.rng, this.mat, this.mix);
+    else this.ring = { mat: this.mat, q: clip(this.rng.normal(1, .08), .85, 1.2), mix: this.mix, offset: [0, 0, 0] };
+    this.h = 0; this.t = 0;
+    this.hist = { t: [], h: [], P: [], p: [], cf4: [], o2: [], vdc: [], refl: [], oes: [], edge: [] };
+    this.pred = []; this.trueLife = null; this.status = '대기';
+  }
+  step() {
+    let rate, vals;
+    if (this.isEtch) {
+      const r = this.rng.choice(this.ring.mix), [P, p, cf4, o2] = RECIPES[r];
+      rate = erosionRate(this.mat, P, p, cf4, o2, this.h, this.ring.q);
+      const s = sensors(this.rng, this.mat, P, p, cf4, o2, this.h, rate, this.ring.offset);
+      vals = [this.t, this.h, P, p, cf4, o2, s[0], s[1], s[2], s[3]];
+    } else {
+      const br = (EXTRA_MATERIALS[this.mat] || {}).base_rate || (this.equip === 'cmp' ? .5 : .7);
+      rate = br * this.ring.q * (1 + (this.equip === 'cmp' ? .2 : .3) * this.h / H_MAX);
+      vals = [this.t, this.h, 0, 0, 0, 0, 0, 0, 0, 0];
+    }
+    ['t', 'h', 'P', 'p', 'cf4', 'o2', 'vdc', 'refl', 'oes', 'edge'].forEach((k, i) => this.hist[k].push(vals[i]));
+    const hn = this.h + rate * DT;
+    if (this.trueLife === null && hn >= H_MAX) this.trueLife = this.t + DT * (H_MAX - this.h) / (hn - this.h);
+    this.h = hn; this.t += DT;
+  }
+  trueRul() {                                        // 시뮬레이터 정답: 현재 레시피 구성 기대값 기준 남은 수명
+    if (!this.isEtch) { const br = ((EXTRA_MATERIALS[this.mat] || {}).base_rate || .6) * this.ring.q; return Math.max((H_MAX - this.h) / br, 0); }
+    if (this.h >= H_MAX) return -(this.t - (this.trueLife ?? this.t));
+    let a = 0; RECIPES.forEach((r, i) => { a += erosionRate(this.mat, r[0], r[1], r[2], r[3], 0, this.ring.q) * this.mix[i]; });
+    const c = .35 / H_MAX;
+    return Math.log(1 + c * H_MAX) / (c * a) - Math.log(1 + c * this.h) / (c * a);
+  }
+  arrays() { const d = { mat: this.mat, n: this.hist.t.length }; for (const k in this.hist) d[k] = Float64Array.from(this.hist[k]); return d; }
+  feat() { const n = this.hist.t.length, d = { mat: this.mat }; for (const k in this.hist) d[k] = this.hist[k].slice(n - WIN); return features(d, WIN - 1, new Float64Array(NF)); }
+}
+
+/* ===== a small matplotlib-like SVG plotter (axes, twin y, lines, fills, bars, scatter, legends, annotations) ===== */
+const Plot = (() => {
+  const FONT = '"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR","Noto Sans CJK KR",system-ui,sans-serif';
+  const C = { ink: '#111729', muted: '#677489', line: '#e3e8ef', grid: '#f1f3f7', panel: '#ffffff', panel2: '#eff2f6' };
+  const mctx = document.createElement('canvas').getContext('2d');
+  const tw = (s, size, w = 400) => { mctx.font = `${w} ${size}px ${FONT}`; return mctx.measureText(String(s)).width; };
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const f1 = v => (Math.round(v * 10) / 10).toString();
+  let uid = 0;
+
+  function nice(lo, hi, maxN) {
+    if (!(hi > lo)) { const d = Math.abs(lo) || 1; lo -= d * .5; hi += d * .5; }
+    const raw = (hi - lo) / Math.max(maxN, 1), mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    let step = mag * 10; for (const s of [1, 2, 2.5, 5, 10]) if (s * mag >= raw) { step = s * mag; break; }
+    const out = []; for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + step * 1e-9; v += step) out.push(Math.abs(v) < step * 1e-9 ? 0 : +v.toPrecision(12));
+    return { ticks: out, step };
+  }
+  const fmt = (v, step) => { const dec = step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step) - 1e-9)); return v.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec }); };
+
+  class Axes {
+    constructor(box) { this.box = box; this.it = []; this.o = { gridX: true, gridY: true }; this.tw = null; }
+    plot(xs, ys, o = {}) { this.it.push({ k: 'line', xs, ys, ...o }); return this; }
+    fill(xs, y0, y1, o = {}) { this.it.push({ k: 'fill', xs, y0, y1, ...o }); return this; }
+    scatter(xs, ys, o = {}) { this.it.push({ k: 'sc', xs, ys, ...o }); return this; }
+    bar(xs, hs, o = {}) { this.it.push({ k: 'bar', xs, hs, ...o }); return this; }
+    hline(y, o = {}) { this.it.push({ k: 'hl', y, ...o }); return this; }
+    vline(x, o = {}) { this.it.push({ k: 'vl', x, ...o }); return this; }
+    text(x, y, s, o = {}) { this.it.push({ k: 'tx', x, y, s, ...o }); return this; }
+    annot(s, x, y, o = {}) { this.it.push({ k: 'an', s, x, y, ...o }); return this; }
+    set(o) { Object.assign(this.o, o); return this; }
+    twinx() { this.tw = new Axes(this.box); this.tw.isTwin = true; this.tw.o.gridX = this.tw.o.gridY = false; return this.tw; }
+
+    limits(shareX) {
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, barY = false;
+      const ax = v => { if (Number.isFinite(v)) { if (v < x0) x0 = v; if (v > x1) x1 = v; } };
+      const ay = v => { if (Number.isFinite(v)) { if (v < y0) y0 = v; if (v > y1) y1 = v; } };
+      for (const i of this.it) {
+        if (i.k === 'line' || i.k === 'sc') { i.xs.forEach(ax); i.ys.forEach(ay); }
+        else if (i.k === 'fill') { i.xs.forEach(ax); (Array.isArray(i.y0) || ArrayBuffer.isView(i.y0) ? i.y0 : [i.y0]).forEach(ay); i.y1.forEach(ay); }
+        else if (i.k === 'bar') { const w = (i.width ?? .8) / 2; i.xs.forEach(x => { ax(x - w); ax(x + w); }); i.hs.forEach((h, j) => { const b = i.bottom ? i.bottom[j] : 0; ay(b); ay(b + h); }); barY = true; }
+        else if (i.k === 'hl' && !i.noScale) ay(i.y);
+        else if (i.k === 'vl') ax(i.x);
+      }
+      if (!Number.isFinite(x0)) { x0 = 0; x1 = 1; } if (!Number.isFinite(y0)) { y0 = 0; y1 = 1; }
+      const mx = (x1 - x0 || 1) * .05, my = (y1 - y0 || 1) * .05;
+      let L = { x0: x0 - mx, x1: x1 + mx, y0: barY && y0 >= 0 ? 0 : y0 - my, y1: y1 + my };
+      if (shareX) { L.x0 = shareX.x0; L.x1 = shareX.x1; }
+      const o = this.o;
+      if (o.xlim) { if (o.xlim[0] != null) L.x0 = o.xlim[0]; if (o.xlim[1] != null) L.x1 = o.xlim[1]; }
+      if (o.ylim) { if (o.ylim[0] != null) L.y0 = o.ylim[0]; if (o.ylim[1] != null) L.y1 = o.ylim[1]; }
+      if (!(L.x1 > L.x0)) L.x1 = L.x0 + 1; if (!(L.y1 > L.y0)) L.y1 = L.y0 + 1;
+      return L;
+    }
+
+    render(out, shareX) {
+      const B = this.box, o = this.o, L = this.limits(shareX); this.L = L;
+      const sx = v => B.x + (v - L.x0) / (L.x1 - L.x0) * B.w, sy = v => B.y + B.h - (v - L.y0) / (L.y1 - L.y0) * B.h;
+      this.sx = sx; this.sy = sy;
+      const id = 'pc' + (++uid);
+      const xt = o.xticks ? { ticks: o.xticks.vals, step: 1 } : nice(L.x0, L.x1, Math.max(3, Math.min(9, Math.round(B.w / 62))));
+      const yt = nice(L.y0, L.y1, Math.max(3, Math.min(8, Math.round(B.h / 34))));
+      const g = [];
+      if (!this.isTwin) {
+        if (o.gridY) for (const v of yt.ticks) g.push(`<line x1="${f1(B.x)}" x2="${f1(B.x + B.w)}" y1="${f1(sy(v))}" y2="${f1(sy(v))}" stroke="${C.grid}" stroke-width=".9"/>`);
+        if (o.gridX) for (const v of xt.ticks) if (v >= L.x0 && v <= L.x1) g.push(`<line y1="${f1(B.y)}" y2="${f1(B.y + B.h)}" x1="${f1(sx(v))}" x2="${f1(sx(v))}" stroke="${C.grid}" stroke-width=".9"/>`);
+      }
+      out.push(`<defs><clipPath id="${id}"><rect x="${f1(B.x)}" y="${f1(B.y - 1)}" width="${f1(B.w)}" height="${f1(B.h + 2)}"/></clipPath></defs>`, ...g, `<g clip-path="url(#${id})">`);
+      const later = [];
+      for (const i of this.it) {
+        const op = i.alpha ?? 1;
+        if (i.k === 'fill') {
+          const n = i.xs.length; if (n < 2) continue;
+          const y0 = k => (typeof i.y0 === 'number' ? i.y0 : i.y0[k]);
+          let d = '';
+          if (i.step) { for (let k = 0; k < n; k++) { const xa = sx(i.xs[k]), xb = k + 1 < n ? sx(i.xs[k + 1]) : xa; d += `${k ? 'L' : 'M'}${f1(xa)},${f1(sy(i.y1[k]))}L${f1(xb)},${f1(sy(i.y1[k]))}`; } d += `L${f1(sx(i.xs[n - 1]))},${f1(sy(y0(n - 1)))}L${f1(sx(i.xs[0]))},${f1(sy(y0(0)))}Z`; }
+          else { for (let k = 0; k < n; k++) d += `${k ? 'L' : 'M'}${f1(sx(i.xs[k]))},${f1(sy(i.y1[k]))}`; for (let k = n - 1; k >= 0; k--) d += `L${f1(sx(i.xs[k]))},${f1(sy(y0(k)))}`; d += 'Z'; }
+          out.push(`<path d="${d}" fill="${i.color}" fill-opacity="${op}" stroke="none"/>`);
+        } else if (i.k === 'line') {
+          const n = i.xs.length; if (!n) continue;
+          let d = '';
+          if (i.step) for (let k = 0; k < n; k++) { const xb = k + 1 < n ? sx(i.xs[k + 1]) : sx(i.xs[k]); d += `${k ? 'L' : 'M'}${f1(sx(i.xs[k]))},${f1(sy(i.ys[k]))}L${f1(xb)},${f1(sy(i.ys[k]))}`; }
+          else for (let k = 0; k < n; k++) d += `${k ? 'L' : 'M'}${f1(sx(i.xs[k]))},${f1(sy(i.ys[k]))}`;
+          if (n > 1) out.push(`<path d="${d}" fill="none" stroke="${i.color}" stroke-width="${i.lw ?? 1.5}" stroke-opacity="${op}" stroke-linejoin="round" stroke-linecap="round"${i.dash ? ` stroke-dasharray="${i.dash}"` : ''}/>`);
+          if (i.marker) for (let k = 0; k < n; k++) out.push(`<circle cx="${f1(sx(i.xs[k]))}" cy="${f1(sy(i.ys[k]))}" r="${i.ms ?? 3.4}" fill="${i.color}"/>`);
+        } else if (i.k === 'sc') {
+          const r = i.r ?? 2.4, n = i.xs.length; let s = '';
+          for (let k = 0; k < n; k++) s += `<circle cx="${f1(sx(i.xs[k]))}" cy="${f1(sy(i.ys[k]))}" r="${r}"/>`;
+          out.push(`<g fill="${i.color}" fill-opacity="${op}">${s}</g>`);
+        } else if (i.k === 'bar') {
+          const w = i.width ?? .8;
+          i.xs.forEach((x, k) => { const b = i.bottom ? i.bottom[k] : 0, h = i.hs[k]; const ya = sy(b + Math.max(h, 0)), yb = sy(b + Math.min(h, 0));
+            out.push(`<rect x="${f1(sx(x - w / 2))}" y="${f1(ya)}" width="${f1(sx(x + w / 2) - sx(x - w / 2))}" height="${f1(Math.max(yb - ya, 0))}" fill="${i.color}" fill-opacity="${op}"/>`); });
+        } else if (i.k === 'hl') {
+          out.push(`<line x1="${f1(B.x)}" x2="${f1(B.x + B.w)}" y1="${f1(sy(i.y))}" y2="${f1(sy(i.y))}" stroke="${i.color}" stroke-width="${i.lw ?? 1}" stroke-opacity="${op}"${i.dash ? ` stroke-dasharray="${i.dash}"` : ''}/>`);
+        } else if (i.k === 'vl') {
+          out.push(`<line y1="${f1(B.y)}" y2="${f1(B.y + B.h)}" x1="${f1(sx(i.x))}" x2="${f1(sx(i.x))}" stroke="${i.color}" stroke-width="${i.lw ?? 1}" stroke-opacity="${op}"${i.dash ? ` stroke-dasharray="${i.dash}"` : ''}/>`);
+        } else later.push(i);
+      }
+      out.push('</g>');
+      // spines + tick labels
+      const tc = C.muted, ts = 12;
+      if (!this.isTwin) {
+        out.push(`<line x1="${f1(B.x)}" x2="${f1(B.x)}" y1="${f1(B.y)}" y2="${f1(B.y + B.h)}" stroke="${C.line}"/>`, `<line x1="${f1(B.x)}" x2="${f1(B.x + B.w)}" y1="${f1(B.y + B.h)}" y2="${f1(B.y + B.h)}" stroke="${C.line}"/>`);
+        if (!o.hideX) xt.ticks.forEach((v, k) => { if (v < L.x0 - 1e-9 || v > L.x1 + 1e-9) return; const lab = o.xticks ? o.xticks.labels[k] : fmt(v, xt.step);
+          String(lab).split('\n').forEach((ln, j) => out.push(`<text x="${f1(sx(v))}" y="${f1(B.y + B.h + 17 + j * 13)}" text-anchor="middle" font-size="${ts}" fill="${tc}">${esc(ln)}</text>`)); });
+        yt.ticks.forEach(v => out.push(`<text x="${f1(B.x - 7)}" y="${f1(sy(v) + 4)}" text-anchor="end" font-size="${ts}" fill="${tc}">${esc(fmt(v, yt.step))}</text>`));
+      } else {
+        out.push(`<line x1="${f1(B.x + B.w)}" x2="${f1(B.x + B.w)}" y1="${f1(B.y)}" y2="${f1(B.y + B.h)}" stroke="${C.line}"/>`);
+        yt.ticks.forEach(v => out.push(`<text x="${f1(B.x + B.w + 7)}" y="${f1(sy(v) + 4)}" font-size="${ts}" fill="${tc}">${esc(fmt(v, yt.step))}</text>`));
+      }
+      if (o.xlabel) out.push(`<text x="${f1(B.x + B.w / 2)}" y="${f1(B.y + B.h + (o.xticks && o.xticks.labels.some(l => String(l).includes('\n')) ? 44 : 36))}" text-anchor="middle" font-size="12.5" fill="${C.muted}">${esc(o.xlabel)}</text>`);
+      if (o.ylabel) { const yx = this.isTwin ? B.x + B.w + (o.ylabelPad ?? 44) : B.x - (o.ylabelPad ?? 44);
+        out.push(`<text transform="translate(${f1(yx)} ${f1(B.y + B.h / 2)}) rotate(-90)" text-anchor="middle" font-size="12.5" fill="${o.ylabelColor || C.muted}">${esc(o.ylabel)}</text>`); }
+      if (o.title) out.push(`<text x="${f1(B.x)}" y="${f1(B.y - 12)}" font-size="13.5" font-weight="700" fill="${C.ink}">${esc(o.title)}</text>`);
+      // texts / annotations (not clipped)
+      for (const i of later) {
+        if (i.k === 'tx') {
+          const x = i.coords === 'axes' ? B.x + i.x * B.w : sx(i.x), y = i.coords === 'axes' ? B.y + (1 - i.y) * B.h : sy(i.y);
+          const dy = i.va === 'top' ? (i.size ?? 12) * .8 : i.va === 'middle' ? (i.size ?? 12) * .35 : i.va === 'bottom' ? -2 : 0;
+          String(i.s).split('\n').forEach((ln, j, arr) => out.push(`<text x="${f1(x + (i.dx || 0))}" y="${f1(y + dy + (i.dy || 0) + (j - (i.va === 'middle' ? (arr.length - 1) / 2 : 0)) * (i.size ?? 12) * 1.3)}" text-anchor="${i.anchor || 'start'}" font-size="${i.size ?? 12}"${i.weight ? ` font-weight="${i.weight}"` : ''} fill="${i.color || C.ink}">${esc(ln)}</text>`));
+        } else if (i.k === 'an') {
+          const x = sx(i.x) + (i.dx || 0), y = sy(i.y) - (i.dy || 0), size = i.size ?? 12.5, w = tw(i.s, size, i.weight || 400);
+          const xa = i.anchor === 'end' ? x - w : i.anchor === 'middle' ? x - w / 2 : x;
+          if (i.box) out.push(`<rect x="${f1(xa - 6)}" y="${f1(y - size - 3)}" width="${f1(w + 12)}" height="${f1(size + 9)}" rx="5" fill="${i.box.fc}" stroke="${i.box.ec}" stroke-width="1"/>`);
+          out.push(`<text x="${f1(xa)}" y="${f1(y)}" font-size="${size}"${i.weight ? ` font-weight="${i.weight}"` : ''} fill="${i.color || C.ink}">${esc(i.s)}</text>`);
+        }
+      }
+      if (this.tw) this.tw.render(out, L);
+      if (o.legend) this.legend(out, o.legend);
+    }
+
+    legend(out, lg) {
+      const B = this.box, size = lg.size ?? 11, items = [];
+      const src = [...this.it, ...(this.tw ? this.tw.it : [])].filter(i => i.label);
+      const order = lg.order ? lg.order.map(k => src[k]).filter(Boolean) : src;
+      for (const i of order) items.push(i);
+      if (!items.length) return;
+      const hw = 22, gap = 7, colGap = 18, rowH = size + 7;
+      const widths = items.map(i => hw + gap + tw(i.label, size));
+      const ncol = Math.min(lg.ncol || 1, items.length), cols = [];
+      for (let c = 0; c < ncol; c++) cols.push(Math.max(...widths.filter((_, k) => k % ncol === c)));
+      const W = cols.reduce((a, b) => a + b, 0) + colGap * (ncol - 1), rows = Math.ceil(items.length / ncol), H = rows * rowH;
+      let x0, y0; const loc = lg.loc || 'ur', pad = 8;
+      if (loc === 'above') { x0 = B.x; y0 = B.y - H - 4; }
+      else { x0 = loc.endsWith('l') ? B.x + pad : B.x + B.w - W - pad; y0 = loc.startsWith('u') ? B.y + pad : B.y + B.h - H - pad; }
+      if (lg.bg) out.push(`<rect x="${f1(x0 - 5)}" y="${f1(y0 - 3)}" width="${f1(W + 10)}" height="${f1(H + 4)}" fill="#fff" fill-opacity=".82"/>`);
+      items.forEach((i, k) => {
+        const c = k % ncol, r = Math.floor(k / ncol), x = x0 + cols.slice(0, c).reduce((a, b) => a + b, 0) + colGap * c, y = y0 + r * rowH + rowH / 2;
+        if (i.k === 'fill' || i.k === 'bar') out.push(`<rect x="${f1(x)}" y="${f1(y - 4.5)}" width="${hw}" height="9" fill="${i.color}" fill-opacity="${i.k === 'bar' ? (i.alpha ?? 1) : Math.min(1, (i.alpha ?? 1) * 1.3)}"/>`);
+        else if (i.k === 'sc') out.push(`<circle cx="${f1(x + hw / 2)}" cy="${f1(y)}" r="3.4" fill="${i.color}" fill-opacity="${Math.min(1, (i.alpha ?? 1) + .25)}"/>`);
+        else { out.push(`<line x1="${f1(x)}" x2="${f1(x + hw)}" y1="${f1(y)}" y2="${f1(y)}" stroke="${i.color}" stroke-width="${Math.min(i.lw ?? 1.5, 3)}" stroke-opacity="${i.alpha ?? 1}"${i.dash ? ` stroke-dasharray="${i.dash}"` : ''}/>`);
+          if (i.marker) out.push(`<circle cx="${f1(x + hw / 2)}" cy="${f1(y)}" r="3" fill="${i.color}"/>`); }
+        out.push(`<text x="${f1(x + hw + gap)}" y="${f1(y + size * .36)}" font-size="${size}" fill="${C.ink}">${esc(i.label)}</text>`);
+      });
+    }
+  }
+
+  /* fig(el, draw): draws into a container at its current pixel size; draw(W,H) returns axes[] */
+  function fig(el, draw) {
+    const W = Math.max(280, el.clientWidth), H = Math.max(240, el.clientHeight);
+    const axes = draw(W, H) || [];
+    const out = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family='${FONT}'><rect width="${W}" height="${H}" fill="#fff"/>`];
+    for (const a of axes) if (a) a.render(out);
+    out.push('</svg>');
+    el.innerHTML = out.join('');
+  }
+  const message = (el, text) => { el.innerHTML = `<svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet"><text x="200" y="104" text-anchor="middle" font-size="14" fill="${C.muted}" font-family='${FONT}'>${esc(text)}</text></svg>`; };
+  return { Axes, fig, message, tw };
+})();
+
+/* ---------- 아두이노 · LoRa 연동 — focusguard_ai.py 의 ArduinoLink + _sync_to_arduino / _on_lora / _lora_refresh / lora_test 를
+   Chrome Web Serial 로 옮긴 것. 송신 아두이노(lora_tx.ino)와 주고받는 줄은 파이썬 앱과 똑같다:
+     PC → 송신 보드:  S,<학습샘플>,<수집링>,<모델버전>,<경과RF h>,<예측수명 h>,<평균오차 h>,<오차율 %×10>  /  F (테스트 송신)  /  R (재무장)  /  ? (누구니)
+     송신 보드 → PC:  BOOT·READY·INFO,TX,<기준>,...  /  GOT,<샘플>  /  SENT,<번호>,<샘플>,<시도>  /  ACK,<번호>,<RSSI>,<SNR>  /  NOACK,<번호>
+   차이는 하나: 브라우저는 보안상 포트를 마음대로 열 수 없어서, 처음 한 번은 'USB 연결'로 포트를 골라야 한다
+   (그 뒤로는 Chrome이 기억해서 페이지를 열거나 보드를 다시 꽂으면 자동으로 연결). */
+const LORA_BAUD = 115200;
+const LK = {
+  mode: 'serial',            // serial · nosupport (Safari 등) · blocked (USB 접근이 막힌 화면, 예: claude.ai 미리보기)
+  port: null, writer: null, reader: null, name: '', ready: false, loraOk: null, threshold: 1000, fw: 1, gotN: null, gotT: null,
+  probing: false, rx: new WeakSet(),
+  stage: 'search', rssi: null, crossed: false, sentN: null, sentT: 0, metrics: [0, 0, 0], nT: 0, crossT: null, warned: new Set(),
+};
+const nowS = () => performance.now() / 1000;
+const pyRound = x => (Math.abs(x % 1) === .5 ? 2 * Math.round(x / 2) : Math.round(x));   // 파이썬 round (짝수 맞춤)
+const enc = new TextEncoder();
+const USB_NAMES = { 0x2341: 'Arduino', 0x2a03: 'Arduino', 0x1a86: 'CH340', 0x0403: 'FTDI', 0x10c4: 'CP210x', 0x239a: 'Adafruit', 0x303a: 'ESP32' };
+function portName(port) {
+  const i = port.getInfo ? port.getInfo() : {};
+  if (i.usbVendorId == null) return 'USB';
+  return USB_NAMES[i.usbVendorId] || `USB ${i.usbVendorId.toString(16).padStart(4, '0')}:${(i.usbProductId || 0).toString(16).padStart(4, '0')}`;
+}
+
+/* ── 포트 열기 · 송신 보드 확인 (파이썬 _probe 와 같은 순서: 열면 우노가 리셋되며 BOOT,TX 를 보냄 → 2.5초 지나도 없으면 ? 로 물어봄) */
+async function linkProbe(port) {
+  try { await port.open({ baudRate: LORA_BAUD }); }
+  catch (e) { return port.readable ? 'open' : 'busy'; }
+  const writer = port.writable.getWriter(), reader = port.readable.getReader(), dec = new TextDecoder();
+  let probing = true, done, buf = '';
+  const result = new Promise(r => { done = r; });
+  const finish = v => { if (probing) { probing = false; done(v); } };
+  const askT = setTimeout(() => { writer.write(enc.encode('?\n')).catch(() => {}); }, 2500);
+  const killT = setTimeout(() => finish('none'), 4500);
+  (async () => {
+    try {
+      for (;;) {
+        const { value, done: end } = await reader.read();
+        if (end) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (probing) {
+            const p = line.split(',');
+            if (['BOOT', 'READY', 'INFO'].includes(p[0]) && p.length > 1) {
+              if (p[1] !== 'TX') { finish('rx'); continue; }               // 수신 보드 등 → 이 포트는 아님
+              Object.assign(LK, { port, writer, reader, name: portName(port), ready: p[0] !== 'BOOT', gotN: null, gotT: null });
+              finish('tx'); onLora(['conn', LK.name]); linkHandle(line);
+            }
+          } else if (LK.port === port) linkHandle(line);
+        }
+      }
+    } catch (e) { /* USB 뽑힘 등 */ }
+    finish('none');
+    if (LK.port === port) linkDrop();
+  })();
+  const r = await result; clearTimeout(askT); clearTimeout(killT);
+  if (r !== 'tx') {
+    try { await reader.cancel(); } catch (e) {}
+    try { reader.releaseLock(); writer.releaseLock(); } catch (e) {}
+    try { await port.close(); } catch (e) {}
+    if (r === 'rx') LK.rx.add(port);
+  }
+  return r;
+}
+async function linkDrop() {
+  const { port, reader, writer } = LK;
+  Object.assign(LK, { port: null, reader: null, writer: null, ready: false });
+  try { await reader.cancel(); } catch (e) {}
+  try { reader.releaseLock(); writer.releaseLock(); } catch (e) {}
+  try { await port.close(); } catch (e) {}
+  onLora(['disc', LK.name]);
+  setTimeout(linkAuto, 3000);
+}
+/* 한 번 허락한 포트는 Chrome이 기억 → 페이지를 열 때 · 보드를 다시 꽂을 때 자동으로 찾아 연결 */
+async function linkAuto() {
+  if (LK.mode !== 'serial' || LK.port || LK.probing) return;
+  let ports = [];
+  try { ports = await navigator.serial.getPorts(); } catch (e) { return; }
+  ports = ports.filter(p => !LK.rx.has(p));
+  if (!ports.length) return;
+  LK.probing = true; loraRefresh();
+  try { for (const p of ports) if (!LK.port && await linkProbe(p) === 'tx') break; }
+  finally { LK.probing = false; loraRefresh(); }
+}
+/* 'USB 연결' — 처음 한 번 포트 고르기 */
+async function linkPick() {
+  if (LK.mode === 'nosupport') { toast('USB 연결을 지원하지 않는 브라우저', '컴퓨터용 Chrome 또는 Edge에서 열어 주세요', COL.warn); return; }
+  if (LK.mode === 'blocked') { toast('이 화면에서는 USB를 쓸 수 없어요', '시뮬레이터 주소를 Chrome 새 탭에서 직접 열어 주세요', COL.warn); return; }
+  if (LK.port || LK.probing) return;
+  let port;
+  try { port = await navigator.serial.requestPort(); }
+  catch (e) {
+    if (e && e.name === 'SecurityError') { LK.mode = 'blocked'; loraRefresh(); linkPick(); }
+    return;                                                          // 창을 닫음 (NotFoundError)
+  }
+  LK.rx.delete(port); LK.probing = true; loraRefresh();
+  let r;
+  try { r = await linkProbe(port); } finally { LK.probing = false; loraRefresh(); }
+  if (r === 'busy') toast('포트를 열 수 없어요', '아두이노 IDE 시리얼 모니터나 파이썬 시뮬레이터가 이 포트를 쓰고 있으면 닫아 주세요', COL.bad);
+  else if (r === 'rx') toast('수신 보드가 선택됐어요', 'lora_tx.ino 를 올린 송신 보드의 포트를 골라 주세요', COL.warn);
+  else if (r === 'none') toast('송신 보드 응답 없음', 'lora_tx.ino 가 올라간 보드인지 확인하고 다시 연결해 주세요', COL.warn);
+}
+
+/* ── 송신 보드 → PC (파이썬 _handle) */
+function linkHandle(line) {
+  if (!line) return;
+  const p = line.split(','), int = s => { const v = parseInt(s, 10); if (Number.isNaN(v)) throw 0; return v; };
+  try {
+    if (p[0] === 'GOT') { LK.gotN = int(p[1]); LK.gotT = nowS(); loraRefresh(); return; }
+    console.log('[Arduino TX]', line);
+    if (['BOOT', 'READY', 'INFO'].includes(p[0]) && p.length >= 3) {
+      LK.threshold = int(p[2]);
+      LK.fw = p.includes('V2') ? 2 : 1;
+      if (p[0] === 'READY' || p[0] === 'INFO') { LK.ready = true; LK.loraOk = p.includes('LORA_OK'); onLora(['ready', LK.loraOk, LK.fw]); }
+    } else if (p[0] === 'SENT') onLora(['sent', int(p[1]), int(p[2]), int(p[3])]);
+    else if (p[0] === 'ACK') onLora(['ack', int(p[1]), int(p[2]), int(p[3])]);
+    else if (p[0] === 'NOACK') onLora(['noack', int(p[1])]);
+  } catch (e) { /* 깨진 줄은 무시 */ }
+}
+/* ── PC → 송신 보드 */
+function linkSend(text) {
+  if (!LK.writer) return false;
+  LK.writer.write(enc.encode(text + '\n')).catch(() => {});           // 끊김은 읽기 쪽이 감지해서 재연결
+  return true;
+}
+function linkSendStatus(samples, rings, ver, rfH, lifeH, maeH, errPct) {
+  if (!LK.ready) return false;
+  let line = `S,${Math.trunc(samples)},${Math.trunc(rings)},${Math.trunc(ver)},${Math.trunc(rfH)}`;
+  if (LK.fw >= 2) line += `,${pyRound(lifeH)},${pyRound(maeH)},${pyRound(errPct * 10)}`;   // 예전 보드 코드는 4칸만 알아들음
+  return linkSend(line);
+}
+
+/* ── 시뮬레이션 상태 → 송신 아두이노 (파이썬 _sync_to_arduino: 학습 샘플이 바뀌면 즉시, 아니면 1초마다) */
+function loraMetrics() {
+  const lives = S.chambers.filter(c => c.isEtch && c.pred.length).map(c => { const p = c.pred[c.pred.length - 1]; return p[0] + p[1]; });
+  const life = lives.length ? mean(lives) : 0, mae = S.pl.cur.mae;
+  return [life, mae, 100 * mae / Math.max(S.testLife, 1)];
+}
+function loraSync(force = false) {
+  if (!S.pl) return;
+  const n = S.pl.nSamples(), now = nowS();
+  if (LK.mode !== 'serial') { loraOffline(n); loraRefresh(); return; }
+  if (force || n !== LK.sentN || now - LK.sentT > 1.0) {
+    const m = loraMetrics();
+    if (linkSendStatus(n, S.pl.records.length, S.pl.cur.no, S.steps * DT, ...m)) {
+      const answered = LK.gotT != null && LK.gotT >= LK.sentT;
+      if (LK.sentN == null || answered) LK.nT = now;                   // 응답 기다리기 시작한 시각
+      LK.sentN = n; LK.sentT = now; LK.metrics = m;
+    }
+  }
+  if (n >= LK.threshold && !LK.crossed) {
+    LK.crossed = true; LK.crossT = now;
+    if (!LK.ready) log(`학습 샘플 ${fmt0(n)}개 ≥ ${fmt0(LK.threshold)} — 송신 아두이노가 연결되지 않아 LoRa 알림을 보내지 못함 `
+      + '(상단 LoRa 표시의 \'USB 연결\'로 송신 보드 연결, 아두이노 IDE 시리얼 모니터가 포트를 잡고 있으면 닫기)', 'urg');
+  }
+  const got = LK.gotN == null ? '없음' : fmt0(LK.gotN);
+  // 진단 ① 상태 줄을 보내는데 송신 보드의 확인(GOT)이 3.5초 넘게 없으면 경고 (V2 보드만 GOT를 보냄)
+  const unanswered = LK.gotT == null || LK.gotT < LK.nT;
+  if (LK.ready && LK.fw >= 2 && LK.sentN != null && unanswered && now - LK.nT > 3.5 && !LK.warned.has('got')) {
+    LK.warned.add('got');
+    log(`송신 보드가 시뮬레이션 상태를 못 받고 있음 (보낸 값 ${fmt0(LK.sentN)}, 보드 확인 ${got}) — USB 케이블을 다시 꽂거나 페이지를 새로 고침`, 'urg');
+  }
+  // 진단 ② 기준을 넘었는데 6초 안에 송신(SENT)이 없으면 경고
+  if (LK.crossT && LK.ready && now - LK.crossT > 6.0 && !LK.warned.has('nosend') && !['sending', 'acked', 'noack'].includes(LK.stage)) {
+    LK.warned.add('nosend');
+    log(`학습 샘플이 ${fmt0(LK.threshold)}개를 넘었는데 송신 보드가 송신하지 않음 (보드 확인 값 ${got}) — 송신 보드에 최신 lora_tx.ino 가 올라갔는지 확인 후 '테스트 송신'으로 무선부터 점검`, 'urg');
+    toast('송신 보드가 송신하지 않음', 'lora_tx.ino 다시 업로드 · 상단 \'테스트 송신\'으로 점검', COL.bad);
+  }
+  loraRefresh();
+}
+/* USB를 쓸 수 없는 화면 — 기준 도달과 알림 내용만 표시 */
+function loraOffline(n) {
+  if (n < LK.threshold || LK.crossed) return;
+  LK.crossed = true;
+  const [life, mae, err] = loraMetrics();
+  log(`학습 샘플 ${fmt0(n)}개 ≥ ${fmt0(LK.threshold)} → LoRa 알림 내용: 예측 수명 ${fmt0(life)} h · 오차율 ${fix(err, 1)} % (±${fmt0(mae)} h) — 이 화면에서는 USB 연결이 막혀 있어 무선 송신은 하지 않음`, 'data');
+  toast('LoRa 알림 기준 도달', `학습 샘플 ${fmt0(LK.threshold)}개 → 예측 수명 ${fmt0(life)} h · 오차율 ${fix(err, 1)} %`, COL.accent2);
+}
+
+/* ── 송신 보드 소식 → 로그 · 토스트 (파이썬 _on_lora) */
+function onLora(m) {
+  const kind = m[0];
+  if (kind === 'conn') {
+    LK.stage = 'init';
+    log(`송신 아두이노 연결 (${m[1]}) — LoRa 모듈 설정 중`, 'info');
+  } else if (kind === 'ready') {
+    const [, ok, fw] = m;
+    LK.stage = ok ? 'ready' : 'fail';
+    if (ok) log(`LoRa 송신 준비 완료 (${LK.name}) — 학습 샘플 ${fmt0(LK.threshold)}개 넘으면 자동 송신`, 'ai');
+    else log(`송신 아두이노(${LK.name})가 LoRa 모듈 응답을 못 받음 — 3.3V · TXD→D2 · RXD←D3(분압) 배선 확인`, 'urg');
+    if (fw < 2) {
+      log('송신 보드 코드가 예전 버전 → 알림은 보내지만 예측 수명·오차율은 빠짐. 시뮬레이션을 끄고 lora_tx.ino 를 다시 업로드하세요', 'man');
+      toast('송신 보드 코드가 예전 버전', '시뮬레이션을 끄고 lora_tx.ino 다시 업로드', COL.warn);
+    }
+    linkSend('R');                                                   // 재무장: 지난 실행에서 '이미 보냄' 상태로 남아 있으면 다시 안 보내기 때문
+    LK.sentN = null; LK.warned.delete('got');
+    loraSync(true);                                                  // 아두이노가 리셋됐으니 현재 상태를 바로 다시 알려줌
+  } else if (kind === 'disc') {
+    LK.stage = 'search';
+    log(`송신 아두이노 연결 끊김 (${m[1]}) — 다시 꽂으면 자동으로 연결`, 'man');
+  } else if (kind === 'sent') {
+    const [, seq, n, tries] = m;
+    LK.stage = 'sending';
+    if (tries === 1) {
+      const [life, mae, err] = LK.metrics;
+      if (LK.fw >= 2) {
+        log(`LoRa 송신 #${seq} — 학습 샘플 ${fmt0(n)}개 ≥ ${fmt0(LK.threshold)} → 예측 수명 ${fmt0(life)} h · 오차율 ${fix(err, 1)} % (±${fmt0(mae)} h) 수신측으로 전송`, 'urg');
+        toast('LoRa 알림 송신', `예측 수명 ${fmt0(life)} h · 오차율 ${fix(err, 1)} % → 수신측으로 전송 중`, COL.accent2);
+      } else {
+        log(`LoRa 송신 #${seq} — 학습 샘플 ${fmt0(n)}개 (예전 보드 코드라 예측 수명·오차율 없이 전송)`, 'urg');
+        toast('LoRa 알림 송신', `학습 샘플 ${fmt0(n)}개 돌파 → 수신측으로 전송 중`, COL.accent2);
+      }
+    } else log(`LoRa 재전송 #${seq} (시도 ${tries}) — 수신 확인 대기`, 'man');
+  } else if (kind === 'ack') {
+    const [, seq, rssi, snr] = m;
+    LK.stage = 'acked'; LK.rssi = rssi;
+    log(`LoRa 수신 확인 #${seq} — 수신측이 알림을 받음 (RSSI ${rssi} dBm · SNR ${snr} dB)`, 'ai');
+    toast('LoRa 수신 확인 ✓', `수신측이 알림을 받았습니다 · RSSI ${rssi} dBm · SNR ${snr} dB`, COL.good);
+  } else if (kind === 'noack') {
+    LK.stage = 'noack';
+    log(`LoRa #${m[1]} 수신 확인 없음 — 수신 보드 전원 · 주소 · NETWORK_ID · BAND 확인`, 'urg');
+    toast('LoRa 수신 확인 실패', '수신 보드 전원과 설정을 확인하세요 (테스트 송신으로 재시도)', COL.bad);
+  }
+  loraRefresh();
+}
+
+/* ── 헤더 LoRa 칩 (파이썬 _lora_refresh) */
+function loraRefresh() {
+  const n = S.pl ? S.pl.nSamples() : 0, th = LK.threshold, port = LK.name;
+  let c, t;
+  if (LK.mode !== 'serial') {
+    if (LK.crossed) { c = COL.accent2; t = `LoRa 알림 기준 도달 · ${fmt0(th)} / ${fmt0(th)}`; }
+    else { c = n ? COL.warn : COL.muted; t = `LoRa 알림 · 학습 샘플 ${fmt0(Math.min(n, th))} / ${fmt0(th)}`; }
+  } else if (!LK.port) {
+    c = COL.muted; t = LK.probing ? 'LoRa 송신기 찾는 중…' : 'LoRa 송신기 미연결';
+  } else if (LK.stage === 'init') { c = COL.warn; t = `LoRa ${port} · 모듈 설정 중…`; }
+  else if (LK.stage === 'fail') { c = COL.bad; t = `LoRa ${port} · 모듈 응답 없음`; }
+  else if (LK.stage === 'sending') { c = COL.accent2; t = 'LoRa 송신 중 · 수신 확인 대기…'; }
+  else if (LK.stage === 'acked') { c = COL.good; t = `LoRa 송신 ✓ 수신 확인 (${LK.rssi} dBm)`; }
+  else if (LK.stage === 'noack') { c = COL.bad; t = 'LoRa 송신 · 수신 확인 없음'; }
+  else if (LK.fw < 2) { c = COL.warn; t = `LoRa ${port} · 샘플 ${fmt0(Math.min(n, th))} / ${fmt0(th)} (보드 코드 예전 버전)`; }
+  else if (LK.gotN == null) { c = COL.warn; t = `LoRa ${port} · 보드 응답 기다리는 중…`; }
+  else { c = COL.good; t = `LoRa ${port} · 보드 수신 ${fmt0(Math.min(LK.gotN, th))} / ${fmt0(th)}`; }
+  $('loraDot').style.background = c; $('loraLbl').textContent = t;
+  $('loraUsb').hidden = LK.mode !== 'serial' || !!LK.port || LK.probing;
+}
+
+/* ── 테스트 송신 (파이썬 lora_test: 시뮬레이션과 상관없이 지금 바로 알림 1회) */
+function loraTest() {
+  if (linkSend('F')) log('LoRa 테스트 송신 요청', 'info');
+  else if (LK.mode === 'serial') toast('송신 아두이노 미연결', '\'USB 연결\'을 눌러 lora_tx.ino 를 올린 보드를 고르세요', COL.warn);
+  else linkPick();
+}
+
+function loraInit() {
+  if (!('serial' in navigator)) LK.mode = 'nosupport';
+  else {
+    try { const fp = document.featurePolicy || document.permissionsPolicy; if (fp && fp.allowsFeature && !fp.allowsFeature('serial')) LK.mode = 'blocked'; } catch (e) {}
+  }
+  $('loraUsb').addEventListener('click', linkPick);
+  $('loraTest').addEventListener('click', loraTest);
+  if (LK.mode === 'serial') {
+    navigator.serial.addEventListener('connect', () => setTimeout(linkAuto, 300));
+    navigator.serial.addEventListener('disconnect', e => { const t = e.target; if (t === LK.port) linkDrop(); else LK.rx.delete(t); });
+    linkAuto();
+  }
+  loraRefresh();
+}
+
+/* ===== FocusGuard AI v6 — web app (App class of focusguard_ai.py, rebuilt for the browser) ===== */
+const $ = id => document.getElementById(id);
+const COL = { accent: '#439288', accentD: '#357a71', accent2: '#6466e9', good: '#4ca154', warn: '#cc7c2e', bad: '#cf4d45', over: '#d24a62',
+  muted: '#677489', ink: '#111729', line: '#e3e8ef', panel: '#ffffff', panel2: '#eff2f6', grid: '#f1f3f7' };
+const STATUS_COL = { '정상': COL.good, '주의': COL.warn, '교체 필요': COL.bad, '수명 임박': COL.bad, '수명 초과': COL.over, '대기': COL.muted };
+const fmt0 = v => Math.round(v).toLocaleString('en-US');
+const fix = (v, d) => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const won = x => Math.abs(x) >= 1e8 ? `${fix(x / 1e8, 2)}억 원` : `${fmt0(x / 1e4)}만 원`;
+const sgn = v => (v >= 0 ? '+' : '−') + fmt0(Math.abs(v));
+function blend(c1, c2, f) { const a = [1, 3, 5].map(i => parseInt(c1.slice(i, i + 2), 16)), b = [1, 3, 5].map(i => parseInt(c2.slice(i, i + 2), 16)); return '#' + a.map((x, i) => Math.round(x + (b[i] - x) * f).toString(16).padStart(2, '0')).join(''); }
+const DOTS = '1.2 2.6';
+
+const S = { pl: null, lab: null, vals: [], cvd: null, training: false, lastTrainN: 0, dirty: new Set(), lastDraw: 0, fleet: [],
+  running: false, started: false, page: 'collect', steps: 0, sel: 0, chambers: [], flash: [0, 0], testLife: 0 };
+
+/* ---------- 원주 팹 · 식각 베이 A (8 챔버) */
+const SPECS = [['CH-01', 'SiC', 'focus_ring', 'etch'], ['CH-02', 'Anodized_Al', 'cover_ring', 'etch'], ['CH-03', 'Al2O3', 'edge_ring', 'cvd_ald_pvd'],
+  ['CH-04', 'Al', 'shadow_ring', 'cvd_ald_pvd'], ['CH-05', 'Al2O3', 'shadow_ring', 'cvd_ald_pvd'], ['CH-06', 'Si', 'focus_ring', 'etch'],
+  ['CH-07', 'PEEK', 'retainer_ring', 'cmp'], ['CH-08', 'PEEK_PI', 'retainer_ring', 'cmp']];
+(() => {
+  const rng = new RNG(42);
+  for (const [name, mat, ring, eq] of SPECS) {
+    const mix = rng.dirichlet([.6, .6, .6, .6, .6]);
+    const ch = new Chamber(name, mat, mix, rng, ring, eq, eq === 'etch');
+    const target = rng.uniform(.15, .85) * H_MAX;
+    while (ch.h < target || ch.hist.t.length < WIN) ch.step();
+    S.chambers.push(ch);
+  }
+})();
+const SPEC_ETCH = S.chambers.filter(c => c.isEtch && MAT_KEYS.includes(c.mat)).map(c => [c.mat, c.mix]);
+
+/* ---------- 카드 */
+function buildCards() {
+  const groups = [['etch', '식각(Etch) 장비 &nbsp;·&nbsp; 포커스링 · 커버링'], ['cvd_ald_pvd', '증착(CVD/ALD/PVD) 장비 &nbsp;·&nbsp; 엣지링 · 쉐도우링'], ['cmp', 'CMP 장비 &nbsp;·&nbsp; 리테이너링']];
+  let html = '';
+  for (const [eq, title] of groups) {
+    html += `<div class="sh">${title}</div><div class="grid2">`;
+    S.chambers.forEach((ch, i) => { if (ch.equip !== eq) return;
+      html += `<button type="button" class="cd" data-i="${i}"><svg class="gg" viewBox="0 0 50 50" aria-hidden="true"><circle class="gk" cx="25" cy="25" r="22.25"/><circle class="ga" cx="25" cy="25" r="22.25" pathLength="100" stroke-dasharray="0 100" transform="rotate(-90 25 25)"/><text class="gp" x="25" y="29.6" text-anchor="middle">0%</text></svg><b class="nm"></b><em class="bd"></em><span class="mt num"></span><span class="v num"></span><span class="tr num"></span></button>`; });
+    html += '</div>';
+  }
+  $('cards').innerHTML = html;
+  $('cards').querySelectorAll('.cd').forEach(b => b.addEventListener('click', () => { S.sel = +b.dataset.i; refreshCollect(); }));
+}
+function drawChamber(i) {
+  const ch = S.chambers[i], el = $('cards').querySelector(`.cd[data-i="${i}"]`), sel = i === S.sel;
+  const wear = ch.h / H_MAX * 100, st = wear >= 80 ? '수명 임박' : wear >= 60 ? '주의' : (ch.status !== '대기' ? ch.status : '정상'), col = STATUS_COL[st] || COL.good;
+  el.classList.toggle('sel', sel); el.setAttribute('aria-pressed', sel);
+  const w = clip(ch.h / H_MAX, 0, 1);
+  const ga = el.querySelector('.ga'); ga.setAttribute('stroke', col); ga.setAttribute('stroke-dasharray', `${w > .005 ? w * 100 : 0} 100`);
+  el.querySelector('.gp').textContent = `${Math.round(w * 100)}%`;
+  el.querySelector('.nm').innerHTML = `${ch.name}&nbsp; ${RING_TYPE_LABEL[ch.ringType]}`;
+  const bg = sel ? COL.panel2 : COL.panel, bd = el.querySelector('.bd');
+  bd.textContent = st; bd.style.color = col; bd.style.background = blend(bg, col, .16); bd.style.borderColor = blend(bg, col, .42);
+  el.querySelector('.mt').textContent = `${(ALL_MATERIALS[ch.mat] || {}).label || ch.mat} · ${EQUIPMENT_TYPE_LABEL[ch.equip]} · RF ${fmt0(ch.t)} h`;
+  const vc = wear >= 50 ? col : COL.ink, last = ch.isEtch && ch.pred.length ? ch.pred[ch.pred.length - 1] : null;
+  if (last) {
+    el.querySelector('.v').innerHTML = `<b style="color:${vc}">잔여 ${fmt0(last[1])}</b><small>h ±${fmt0(last[2])}</small>`;
+    el.querySelector('.tr').textContent = $('truth').checked ? `정답 ${fmt0(last[3])} h` : '';
+  } else {
+    const br = (EXTRA_MATERIALS[ch.mat] || {}).base_rate || .6;
+    el.querySelector('.v').innerHTML = `<b style="color:${vc}">잔여 ≈ ${fmt0(Math.max(0, H_MAX - ch.h) / br)} h</b>`;
+    el.querySelector('.tr').textContent = '';
+  }
+}
+
+/* ---------- ① 상세 그래프 */
+function drawDetail() {
+  const ch = S.chambers[S.sel], ver = S.pl ? `v${S.pl.cur.no}` : '—';
+  $('detTitle').textContent = `${ch.name}  ·  ${(ALL_MATERIALS[ch.mat] || {}).label || ch.mat} ${RING_TYPE_LABEL[ch.ringType]}  ·  ${EQUIPMENT_TYPE_LABEL[ch.equip]}  ·  RF ${fmt0(ch.t)} h`;
+  $('detSub').textContent = `수집 링 ${ch.replacements}개  ·  마모율 ${fix(ch.h / H_MAX * 100, 1)}%  ·  예측 모델 ${ver}`;
+  const H = ch.hist, t = H.t, truth = $('truth').checked;
+  const hasSens = ch.isEtch && H.edge.length && H.edge.some(v => v !== 0), P = ch.isEtch ? ch.pred : [];
+  let xs0 = t.length ? t[0] : 0, xs1 = t.length ? t[t.length - 1] : 1;
+  if (P.length) { xs0 = Math.min(xs0, P[0][0]); xs1 = Math.max(xs1, P[P.length - 1][0]); }
+  const mx = (xs1 - xs0 || 1) * .05, xlim = [xs0 - mx, xs1 + mx];
+  Plot.fig($('figCollect'), (W, Hh) => {
+    const L = Math.max(70, W * .085), R = Math.max(70, W * .085), T = Math.max(40, Hh * .085), Bm = Math.max(52, Hh * .12);
+    const h = (Hh - T - Bm) / 2.3, gap = h * .3, w = W - L - R;
+    const a0 = new Plot.Axes({ x: L, y: T, w, h }), a1 = new Plot.Axes({ x: L, y: T + h + gap, w, h });
+    a0.set({ xlim, hideX: true }); a1.set({ xlim, xlabel: '현재 링 누적 RF 시간 [h]' });
+    if (hasSens) {
+      let em = 0; for (const v of H.edge) if (v > em) em = v;
+      a0.fill(t, 0, H.edge, { color: COL.accent, alpha: .07 }).plot(t, H.edge, { color: COL.accent, lw: 1.4, label: '센서 기록 ▸ 엣지 식각 편차 (%)' });
+      a0.set({ ylim: [0, Math.max(7, em + .6)], ylabel: '엣지 식각 편차 [%]', ylabelColor: COL.accent, legend: { loc: 'above', ncol: 2 } });
+      a0.twinx().plot(t, H.refl, { color: COL.accent2, lw: 1.1, alpha: .8, label: '반사 전력 (%)' }).set({ ylabel: '반사 전력 [%]', ylabelColor: COL.accent2, ylabelPad: 46 });
+    } else {
+      const wear = H.h.map(v => v / H_MAX * 100);
+      a0.fill(t, 0, wear, { color: COL.accent2, alpha: .12 }).plot(t, wear, { color: COL.accent2, lw: 1.6, label: '마모율 (%)' }).hline(80, { color: COL.bad, dash: '3 4', label: '교체 기준 80%' });
+      a0.set({ ylim: [0, 105], ylabel: '마모율 [%]', legend: { loc: 'ul', bg: true } });
+    }
+    if (P.length) {
+      const pt = P.map(p => p[0]), mu = P.map(p => p[1]), sd = P.map(p => p[2]), tr = P.map(p => p[3]);
+      const ylo = Math.min(-60, (truth ? Math.min(...tr) : 0) - 20), last = P.length - 1;
+      a1.fill(pt, mu.map((m, k) => Math.max(m - sd[k], 0)), mu.map((m, k) => m + sd[k]), { color: COL.accent, alpha: .14, label: '모델 오차 범위' });
+      a1.plot(pt, mu, { color: COL.accent, lw: 2.2, label: `AI 예측 잔여수명 (${ver})` });
+      if (truth) a1.plot(pt, tr, { color: COL.ink, lw: 1.1, dash: '4.4 3.3', alpha: .8, label: '정답' });
+      a1.hline(0, { color: COL.bad, dash: '2 3', lw: 1, noScale: true }).text(pt[0], 14, '마모 한계 → 수명 확정', { color: COL.bad, size: 11.8 });
+      a1.scatter([pt[last]], [mu[last]], { color: COL.accent, r: 4.6 });
+      a1.annot(`${fmt0(mu[last])} h`, pt[last], mu[last], { dx: -12, dy: 14, anchor: 'end', size: 12.5, weight: 700, color: COL.accentD, box: { fc: COL.panel2, ec: COL.accent } });
+      a1.set({ ylim: [ylo, null], ylabel: '잔여수명 [RF h]', legend: { loc: 'above', ncol: 3, order: truth ? [1, 0, 2] : [1, 0] } });
+    } else {
+      const rem = H.h.map(v => H_MAX - v);
+      a1.fill(t, 0, H.h, { color: COL.good, alpha: .12 }).fill(t, 0, rem, { color: COL.good, alpha: .12 }).plot(t, rem, { color: COL.good, lw: 1.8, label: '잔여 두께 (µm)' });
+      a1.hline(0, { color: COL.bad, dash: '3 4', label: '수명 한계 (0 µm)' }).set({ ylim: [0, null], ylabel: '잔여 두께 [µm]', legend: { loc: 'ur', bg: true } });
+    }
+    return [a0, a1];
+  });
+}
+function refreshCollect() { S.chambers.forEach((_, i) => drawChamber(i)); drawDetail(); }
+
+/* ---------- 로그 · 토스트 */
+const LOG_COL = { info: COL.muted, ai: COL.accent, data: COL.accent2, urg: COL.bad, man: COL.warn, over: COL.over };
+function log(s, kind = 'info') {
+  const rf = S.steps * DT, now = new Date(), hh = now.toTimeString().slice(0, 8);
+  const p = document.createElement('p');
+  p.innerHTML = `<i style="color:${LOG_COL[kind] || COL.muted}">●</i><span>${hh}  RF ${fmt0(rf).padStart(6, ' ')}h</span>`;
+  p.appendChild(document.createTextNode(s));
+  const L = $('log'); L.insertBefore(p, L.firstChild);
+  while (L.children.length > 200) L.removeChild(L.lastChild);
+}
+let toastT = 0;
+function toast(title, sub = '', color = COL.accent) {
+  const el = $('toast'); el.style.setProperty('--tc', color); $('toastT').textContent = title; $('toastS').textContent = sub;
+  el.hidden = false; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, 3200);
+}
+
+/* ---------- 흐름 바 */
+function refreshFlowbar() {
+  const pl = S.pl; if (!pl) return;
+  const n = pl.records.length, cur = pl.cur, v0 = pl.versions[0];
+  $('tv-collect').textContent = `링 ${n}개`;
+  $('ts-collect').textContent = `학습 샘플 ${fmt0(pl.nSamples())} · 경과 RF ${fmt0(S.steps * DT)} h`;
+  $('tv-model').textContent = `v${cur.no} · 오차 ${fmt0(cur.mae)} h`;
+  const imp = 100 * (1 - cur.mae / v0.mae);
+  if (S.training) $('ts-model').textContent = `v${cur.no + 1} 학습 중… ${fmt0(S.trPct || 0)}%`;
+  else if (cur.no === 0) $('ts-model').textContent = '물리 모델만 사용 중 (원주 데이터 0건)';
+  else $('ts-model').textContent = `링 ${cur.n_rings}개 학습 · v0 대비 −${fmt0(imp)}% · 다음 학습까지 ${Math.max(+$('trEvery').value - (n - S.lastTrainN), 0)}개`;
+  if (S.vals.length) {
+    const vc = S.vals[S.vals.length - 1], cvd = S.cvd ? S.cvd.saving : 0;
+    $('tv-value').textContent = `연 ${won(vc.saving + cvd)}`;
+    $('ts-value').textContent = `식각 AI ${won(vc.saving)} + CVD/CMP ${won(cvd)} · 8챔버 통합`;
+  }
+}
+function arrows() {
+  const now = performance.now();
+  $('arw0').classList.toggle('on', now < S.flash[0] || S.running || S.training);
+  $('arw1').classList.toggle('on', now < S.flash[1]);
+}
+
+/* ---------- 페이지 전환 */
+const PAGES = ['collect', 'model', 'value'];
+function showPage(key, fromHash) {
+  if (!PAGES.includes(key)) key = 'collect';
+  S.page = key;
+  PAGES.forEach(k => { $('pg-' + k).hidden = k !== key; });
+  document.querySelectorAll('.tile').forEach(t => { const on = t.dataset.page === key; t.classList.toggle('on', on); t.setAttribute('aria-pressed', on); });
+  if (!fromHash) { try { history.replaceState(null, '', '#' + key); } catch (e) {} }
+  refreshPage(key);
+}
+function refreshPage(key) {
+  S.dirty.delete(key);
+  if (key === 'collect') refreshCollect(); else if (key === 'model') refreshModel(); else refreshValue();
+  S.lastDraw = performance.now();
+}
+
+/* ---------- 시뮬레이션 */
+function predictChambers() {
+  if (!S.pl) return;
+  const etch = S.chambers.filter(c => c.isEtch && c.hist.t.length >= WIN);
+  if (etch.length) {
+    const MU = S.pl.predictRaw(etch.map(c => c.feat())), sd = S.pl.cur.mae;
+    etch.forEach((c, k) => { const mu = MU[k]; c.pred.push([c.t, mu, sd, c.trueRul()]); c.status = mu <= 24 ? '수명 임박' : mu <= 150 ? '주의' : '정상'; });
+  }
+  for (const c of S.chambers) if (!c.isEtch) { const w = c.h / H_MAX * 100; c.status = w >= 80 ? '수명 임박' : w >= 60 ? '주의' : '정상'; }
+}
+function collect(i) {
+  const ch = S.chambers[i]; ch.replacements++;
+  const life = ch.trueLife ?? ch.t, ring = RING_TYPE_LABEL[ch.ringType];
+  if (ch.isEtch && S.pl) {
+    const r = S.pl.addRecord(ch, S.steps * DT), err = r.live_err != null ? `${fmt0(r.live_err)} h` : '—';
+    const tr = document.createElement('tr'); tr.className = 'new';
+    [r.no, ch.name, `${ch.mat}/${ring}`, `${fmt0(r.life)} h`, r.samples, err, `v${r.version}`].forEach(v => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+    $('dataTb').insertBefore(tr, $('dataTb').firstChild);
+    log(`${ch.name}  수명 확정 ${fmt0(r.life)} h → 학습 데이터 #${r.no} 적재 (샘플 ${r.samples}, 운영 오차 ${err})`, 'data');
+    S.fleet.push({ no: r.no, chamber: ch.name, material: ch.mat, life_h: +r.life.toFixed(1), samples: r.samples, live_err_h: r.live_err == null ? '' : +r.live_err.toFixed(1), model_version: r.version, sim_rf_h: r.t_sim });
+  } else log(`${ch.name}  [${ring}] 수명 확정 ${fmt0(life)} h → 교체 완료`, 'data');
+  ch.newRing();
+  while (ch.hist.t.length < WIN) ch.step();
+  S.flash[0] = performance.now() + 1000;
+}
+function maybeRetrain() { if (S.pl && !S.training && S.pl.records.length - S.lastTrainN >= +$('trEvery').value) startTrain(); }
+async function startTrain() {
+  const pl = S.pl; if (!pl || S.training || !pl.records.length) return;
+  S.training = true; S.trPct = 0; $('trBtn').disabled = true; $('trBar').style.width = '0%';
+  try {
+    const v = await pl.train(+$('trEpochs').value, $('trFt').checked, S.steps * DT, f => { S.trPct = 100 * f; $('trBar').style.width = `${S.trPct}%`; });
+    onVersion(v);
+  } catch (e) { S.training = false; $('trBtn').disabled = false; $('foot').textContent = '학습 오류: ' + e; console.error(e); }
+}
+function onVersion(v) {
+  const pl = S.pl, prev = pl.cur.mae;
+  pl.addVersion(v);
+  S.training = false; S.lastTrainN = v.n_rings; $('trBtn').disabled = false; $('trBar').style.width = '100%';
+  $('bootLbl').textContent = `v${v.no} 배포 · 원주 링 ${v.n_rings}개 학습 · 오차 ${fmt0(v.mae)} h`;
+  S.flash[0] = S.flash[1] = performance.now() + 2500;
+  recomputeValues();
+  log(`모델 v${v.no} 배포 — 링 ${v.n_rings}개 · 샘플 ${fmt0(v.n_samples)} · 검증 오차 ${fmt0(v.mae)} h (${sgn(v.mae - prev)})`, 'ai');
+  const sav = S.vals[S.vals.length - 1].saving + (S.cvd ? S.cvd.saving : 0);
+  toast(`모델 v${v.no} 배포`, `원주 링 ${v.n_rings}개 학습 · 오차 ${fmt0(v.mae)} h · 연 ${won(sav)} 절감`, COL.accent);
+  S.dirty.add('model'); S.dirty.add('value');
+  if (S.dirty.has(S.page)) refreshPage(S.page);
+  refreshFlowbar(); loraRefresh();
+}
+function simTick() {
+  if (!S.running) return;
+  const n = +$('speed').value; let got = 0;
+  for (let k = 0; k < n; k++) {
+    for (const c of S.chambers) c.step();
+    S.steps++;
+    predictChambers();
+    S.chambers.forEach((c, i) => { if (c.h >= H_MAX) { collect(i); got++; } });
+  }
+  if (got) { predictChambers(); S.dirty.add('model'); }
+  maybeRetrain();
+  if (S.page === 'collect') refreshPage('collect');
+  else if (S.dirty.has(S.page) && performance.now() - S.lastDraw > 1500) refreshPage(S.page);
+  refreshFlowbar(); loraSync(); arrows();
+  setTimeout(simTick, 350);
+}
+function toggleSim() {
+  S.running = !S.running; S.started = true;
+  $('simBtn').innerHTML = S.running ? '⏸&nbsp; 일시정지' : '▶&nbsp; 시뮬레이션 재개';
+  if (S.running) setTimeout(simTick, 10);
+  arrows();
+}
+
+/* ---------- 아두이노 · LoRa 연동 → sim_lora.js */
+
+/* ---------- ② 모델 학습 · 수명 예측 */
+function refreshModel() {
+  const pl = S.pl, el = $('figModel');
+  if (!pl) { Plot.message(el, '모델 준비 중…'); return; }
+  const recs = pl.records, vers = pl.versions, cur = pl.cur, v0r = vers[0], v0 = v0r.mae, imp = 100 * (1 - cur.mae / v0);
+  $('m-rings').textContent = `${recs.length}개`; $('m-samples').textContent = fmt0(pl.nSamples());
+  $('m-ver').textContent = `v${cur.no}`; $('m-mae').textContent = `${fmt0(cur.mae)} h`;
+  $('m-imp').textContent = cur.no ? `−${fmt0(imp)}%` : '기준'; $('m-imp').style.color = cur.no && imp > 0 ? COL.good : COL.ink;
+  $('m-hit').textContent = `${fmt0(cur.hit * 100)}%`;
+  const ne = S.chambers.filter(c => !c.isEtch);
+  if (ne.length) {
+    const wear = mean(ne.map(c => c.h / H_MAX * 100)), crit = ne.filter(c => c.h / H_MAX >= .8).length, warn = ne.filter(c => c.h / H_MAX >= .6 && c.h / H_MAX < .8).length;
+    const rul = mean(ne.map(c => Math.max(0, (H_MAX * .8 - c.h) / Math.max((EXTRA_MATERIALS[c.mat] || {}).base_rate || .6, .01))));
+    $('c-count').textContent = `${ne.length}개`; $('c-warn').textContent = `${warn + crit}개`; $('c-warn').style.color = crit ? COL.bad : warn ? COL.warn : COL.good;
+    $('c-wear').textContent = `${fix(wear, 1)}%`; $('c-rul').textContent = `${fmt0(rul)} h`;
+  }
+  $('verTb').innerHTML = vers.slice().reverse().map(v => `<tr><td>v${v.no}</td><td>${v.n_rings}</td><td>${fmt0(v.n_samples)}</td><td>${fmt0(v.mae)} h</td><td>${v.no === 0 ? '기준' : `−${fmt0(100 * (1 - v.mae / v0))}%`}</td></tr>`).join('');
+  const k = Math.max(0, $('prRing').selectedIndex);
+  const meanErr = a => mean(Array.from(a));
+  $('prTxt').textContent = cur.no
+    ? `원주 링 ${cur.n_rings}개 학습: 오차 ${fmt0(v0)} → ${fmt0(cur.mae)} h (−${fmt0(imp)}%)\n물리 모델 편향 ${sgn(meanErr(v0r.err))} h → ${sgn(meanErr(cur.err))} h 로 보정\n±100 h 이내 적중 ${fmt0(v0r.hit * 100)}% → ${fmt0(cur.hit * 100)}%`
+    : `현재 v0 (물리 모델만): 오차 ${fmt0(v0)} h, 편향 ${sgn(meanErr(v0r.err))} h\n원주 팹 링 수명이 확정될 때마다 학습 데이터가 쌓이고 오차가 줄어듭니다.`;
+  Plot.fig(el, (W, H) => {
+    const narrow = W < 760, cols = narrow ? 2 : 3, rows = narrow ? 3 : 2;
+    const L = Math.max(66, W * .06), R = W * .02 + 6, T = Math.max(34, H * .07), Bm = Math.max(46, H * .09);
+    const cw = (W - L - R) / (cols + (cols - 1) * .32), ch = (H - T - Bm) / (rows + (rows - 1) * .5);
+    const box = n => { const c = n % cols, r = Math.floor(n / cols); return { x: L + c * cw * 1.32, y: T + r * ch * 1.5, w: cw, h: ch }; };
+    const A = [0, 1, 2, 3, 4, 5].map(n => new Plot.Axes(box(n)));
+    // (0,0) 학습 곡선
+    let a = A[0];
+    const trained = vers.filter(v => v.loss).slice(-5);
+    trained.forEach((v, j) => { const ys = (v.finetune ? [v0] : []).concat(v.loss.test), x0 = v.finetune ? 0 : 1;
+      a.plot(ys.map((_, q) => x0 + q), ys, { color: blend(COL.muted, COL.accent, (j + 1) / trained.length), lw: j === trained.length - 1 ? 2.2 : 1.2, label: `v${v.no} (링 ${v.n_rings})` }); });
+    a.hline(v0, { color: COL.muted, dash: DOTS, lw: 1.2, label: 'v0 물리 모델' });
+    if (trained.length) a.set({ legend: { loc: 'll', ncol: 2, size: 10, bg: true } }); else a.text(.5, .5, '링이 수집되면\n학습이 시작됩니다', { coords: 'axes', anchor: 'middle', va: 'middle', color: COL.muted, size: 12 });
+    a.set({ title: '학습 곡선 · epoch별 검증 오차', xlabel: 'epoch', ylabel: '검증 MAE [h]', ylim: [0, v0 * 1.25], xlim: trained.length ? null : [0, 30] });
+    // (0,1) 수집 링 수에 따른 예측 오차
+    a = A[1];
+    const xs = vers.map(v => v.n_rings), ys = vers.map(v => v.mae), live = recs.filter(r => r.live_err != null);
+    if (live.length) a.scatter(live.map(r => r.no), live.map(r => r.live_err), { color: COL.accent2, r: 2.2, alpha: .45, label: '운영 중 실제 오차 (링별)' });
+    a.plot(xs, ys, { color: COL.accent, lw: 2.2, marker: true, ms: 3.4, label: '검증 오차 (모델 버전)' }).hline(v0, { color: COL.muted, dash: DOTS, lw: 1.2, label: 'v0 물리 모델' });
+    a.annot(`${fmt0(ys[ys.length - 1])} h`, xs[xs.length - 1], ys[ys.length - 1], { dy: 10, anchor: 'middle', color: COL.accentD, size: 12, weight: 700 });
+    a.set({ title: '수집 링 수에 따른 예측 오차', xlabel: '학습에 쓴 원주 링 [개]', ylabel: '평균 오차 [h]', legend: { loc: 'ur', size: 10, bg: true },
+      ylim: [0, live.length ? Math.max(...ys, ...live.map(r => r.live_err)) * 1.15 : Math.max(...ys) * 1.3], xlim: [-1, Math.max(xs[xs.length - 1], recs.length, 8) + 2] });
+    // (0,2) 학습 데이터 누적 · 재학습 시점
+    a = A[2];
+    if (recs.length) {
+      const ts = [0, ...recs.map(r => r.t_sim)], ns = ts.map((_, q) => q);
+      a.fill(ts, 0, ns, { color: COL.accent, alpha: .08, step: true }).plot(ts, ns, { color: COL.accent, lw: 2, step: true });
+      vers.slice(1).slice(-10).forEach(v => { a.vline(v.t_sim, { color: COL.accent2, lw: .8, alpha: .7 }); a.text(v.t_sim, v.n_rings, `v${v.no}`, { color: COL.accent2, size: 10, anchor: 'end', va: 'bottom', dx: -2 }); });
+      a.set({ xlim: [0, Math.max(S.steps * DT, ts[ts.length - 1]) * 1.02 + 1], ylim: [0, null] });
+    } else a.text(.5, .5, '아직 수명이 확정된\n링이 없습니다', { coords: 'axes', anchor: 'middle', va: 'middle', color: COL.muted, size: 12 }).set({ xlim: [0, 1], ylim: [0, 1] });
+    a.set({ title: '학습 데이터 누적 · 재학습 시점', xlabel: '경과 RF 시간 [h]', ylabel: '수집 링 [개]' });
+    // (1,0) 예측 vs 실제
+    a = A[3];
+    if (!S.idx) { const p = new RNG(0).perm(pl.nt); S.idx = Array.from(p.subarray(0, Math.min(700, pl.nt))); }
+    const yt = S.idx.map(i => pl.yt[i]);
+    a.scatter(yt, S.idx.map(i => v0r.pred[i]), { color: COL.muted, r: 1.9, alpha: .3, label: 'v0 물리 모델' });
+    if (cur.no) a.scatter(yt, S.idx.map(i => cur.pred[i]), { color: COL.accent, r: 1.9, alpha: .45, label: `v${cur.no} 현재` });
+    let hi = 0; for (let i = 0; i < pl.nt; i++) hi = Math.max(hi, pl.yt[i], v0r.pred[i]); hi *= 1.03;
+    a.plot([0, hi], [0, hi], { color: COL.ink, dash: DOTS, lw: 1 }).set({ xlim: [0, hi], ylim: [0, hi], title: '예측 vs 실제 잔여수명 (검증 링)', xlabel: '실제 잔여수명 [h]', ylabel: '예측 [h]', legend: { loc: 'ul', size: 10, bg: true } });
+    // (1,1) 예시 검증 링 추적
+    a = A[4];
+    const d = pl.test[k], tt = [], act = [], q0 = [], qc = [];
+    for (let j = WIN - 1; j < d.n; j++) { const tj = d.t[j]; if (tj > d.life) continue; tt.push(tj); act.push(d.life - tj); q0.push(v0r.traj[k][j - WIN + 1]); qc.push(cur.traj[k][j - WIN + 1]); }
+    a.plot(tt, act, { color: COL.ink, dash: '4.4 3.3', lw: 1.3, label: '실제' }).plot(tt, q0, { color: COL.muted, lw: 1.4, label: 'v0' });
+    if (cur.no) a.plot(tt, qc, { color: COL.accent, lw: 2.2, label: `v${cur.no} 현재` });
+    a.set({ title: `검증 링 #${k + 1} · ${MATERIALS[d.mat].label} 추적`, xlabel: 'RF 시간 [h]', ylabel: '잔여수명 [h]', legend: { loc: 'ur', size: 10, bg: true } });
+    // (1,2) 물리 모델 예측 vs 실제 수명
+    a = A[5];
+    if (recs.length) {
+      for (const mt of MAT_KEYS) { const rr = recs.filter(r => r.mat === mt); if (rr.length) a.scatter(rr.map(r => r.life), rr.map(r => r.phys_life), { color: MATERIALS[mt].color, r: 3.3, alpha: .85, label: MATERIALS[mt].label }); }
+      const h2 = Math.max(...recs.map(r => r.life), ...recs.map(r => r.phys_life)) * 1.08;
+      a.plot([0, h2], [0, h2], { color: COL.muted, dash: DOTS, lw: 1 }).set({ xlim: [0, h2], ylim: [0, h2], legend: { loc: 'lr', size: 10, bg: true } });
+      const bias = 100 * mean(recs.map(r => r.phys_life / r.life - 1));
+      a.text(.03, .95, `물리 모델 평균 ${sgn(bias)}% 편차`, { coords: 'axes', va: 'top', color: COL.warn, size: 11.5 });
+    } else a.text(.5, .5, '링이 수집되면\n표시됩니다', { coords: 'axes', anchor: 'middle', va: 'middle', color: COL.muted, size: 12 }).set({ xlim: [0, 1], ylim: [0, 1] });
+    a.set({ title: '물리 모델 예측 vs 실제 수명', xlabel: '실제 수명 [h]', ylabel: '물리 모델 예측 [h]' });
+    return A;
+  });
+}
+
+/* ---------- ③ 가치 환산 */
+const CFG_FIELDS = [['chambers', '식각 챔버 수', 20], ['hours', '챔버당 연간 RF 시간', 6000], ['wph', '시간당 웨이퍼 처리량', 25], ['wafer_value', '웨이퍼 1장 가치 (원)', 400000],
+  ['yield_loss', '수명 초과 시 수율 손실 (%)', 8], ['pm_planned', '교체 1회 정지 (시간)', 4], ['down_cost', '정지 1시간 손실 (원)', 1500000]];
+function econCfg() {
+  const num = (k, d) => { const v = parseFloat(String($('cfg-' + k).value).replace(/,/g, '')); return Number.isFinite(v) ? v : d; };
+  return { chambers: num('chambers', 20), hours: num('hours', 6000), wph: num('wph', 25), wafer_value: num('wafer_value', 4e5), yield_loss: num('yield_loss', 8) / 100, pm_planned: num('pm_planned', 4), down_cost: num('down_cost', 1.5e6) };
+}
+function recomputeValues() {
+  if (!S.pl) return;
+  const cfg = econCfg(), m = +$('vMargin').value, k = +$('vKs').value;
+  S.vals = S.pl.versions.map(v => policyCosts(S.pl, v, cfg, m, k));
+  S.cvd = cvdCmpCosts(S.chambers, cfg);
+}
+function onValueCfg() { recomputeValues(); refreshValue(); refreshFlowbar(); }
+function refreshValue() {
+  const pl = S.pl, el = $('figValue');
+  if (!pl || !S.vals.length) { Plot.message(el, '모델 준비 중…'); return; }
+  const vers = pl.versions, vals = S.vals, cur = pl.cur, vc = vals[vals.length - 1], vz = vals[0], cfg = econCfg();
+  const cvd = S.cvd ? S.cvd.saving : 0, total = vc.saving + cvd, pct = 100 * vc.saving / Math.max(vc.max_saving, 1);
+  $('valTxt').textContent = `현재 모델 v${cur.no} (원주 링 ${cur.n_rings}개 학습)\n식각 AI 절감 ${won(vc.saving)} · 이론 최대의 ${fmt0(pct)}%\n${cvd > 0 ? `CVD/CMP 마모 관리 절감: ${won(cvd)}\n` : ''}통합 절감 합계: ${won(total)}\n연간 교체 ${fmt0(vc.fixed.n_rep)}회 → ${fmt0(vc.ai.n_rep)}회`;
+  Plot.fig(el, (W, H) => {
+    const narrow = W < 700;
+    const L = Math.max(66, W * .08), R = W * .03 + 8, T = Math.max(34, H * .07), Bm = Math.max(56, H * .11);
+    const rowH = (H - T - Bm) / 2.55, gw = (W - L - R) / 2.28;
+    const top = new Plot.Axes({ x: L, y: T, w: W - L - R, h: rowH });
+    const bl = new Plot.Axes({ x: L, y: T + rowH * 1.55, w: narrow ? W - L - R : gw, h: rowH });
+    const br = narrow ? null : new Plot.Axes({ x: L + gw * 1.28, y: T + rowH * 1.55, w: gw, h: rowH });
+    // 버전별 연간 절감액
+    const xs = vers.map(v => v.n_rings), sv = vals.map(r => r.saving / 1e8);
+    top.fill(xs, 0, sv, { color: COL.good, alpha: .1 }).plot(xs, sv, { color: COL.good, lw: 2.2, marker: true, ms: 3.4, label: 'AI 예측 교체 · 연간 절감액' });
+    top.hline(vc.max_saving / 1e8, { color: COL.accent, dash: '4.4 3.3', lw: 1.2, label: '완벽 예측 시 이론 최대' }).hline(0, { color: COL.line, lw: 1 });
+    const stepN = Math.max(1, Math.floor(vers.length / 8)), marks = vers.map((v, i) => [v, sv[i]]).filter((_, i) => i % stepN === 0); marks.push([cur, sv[sv.length - 1]]);
+    for (const [v, s] of marks) top.annot(`v${v.no}`, v.n_rings, s, { dy: 8, anchor: 'middle', size: 10, color: COL.muted });
+    top.annot(`${fix(sv[sv.length - 1], 2)}억`, xs[xs.length - 1], sv[sv.length - 1], { dx: 9, dy: -4, size: 13, weight: 700, color: COL.good });
+    top.set({ title: '학습 데이터가 늘수록 커지는 연간 절감액 (고정 주기 대비)', xlabel: '학습에 쓴 원주 링 [개]', ylabel: '억 원 / 년', legend: { loc: 'lr', size: 10.5, bg: true },
+      ylim: [Math.min(0, ...sv) * 1.1, Math.max(vc.max_saving / 1e8, ...sv) * 1.25], xlim: [-1, Math.max(xs[xs.length - 1], 8) + 4] });
+    // 비용 구성
+    const cols = [['고정\n주기', vz.fixed], ['AI v0\n물리 모델', vz.ai], [`AI v${cur.no}\n현재`, vc.ai], ['완벽\n예측', vc.oracle]], X = [0, 1, 2, 3];
+    const parts = cols.map(c => c[1].part / 1e8), downs = cols.map(c => c[1].down / 1e8), ylds = cols.map(c => c[1].yld / 1e8);
+    bl.bar(X, parts, { width: .58, color: '#9aa4b6', label: '부품비' }).bar(X, downs, { width: .58, bottom: parts, color: '#677489', label: '교체 정지 손실' })
+      .bar(X, ylds, { width: .58, bottom: parts.map((p, i) => p + downs[i]), color: COL.bad, label: '수율 손실' });
+    cols.forEach((c, i) => bl.text(i, c[1].total / 1e8, `${fix(c[1].total / 1e8, 1)}억`, { anchor: 'middle', va: 'bottom', size: 11.5, weight: 700, dy: -2 }));
+    bl.set({ xticks: { vals: X, labels: cols.map(c => c[0]) }, gridX: false, xlim: [-.6, 3.6], ylim: [0, Math.max(...cols.map(c => c[1].total)) / 1e8 * 1.3], legend: { loc: 'ur', size: 10, bg: true },
+      title: `연간 비용 구성 · 챔버 ${fmt0(cfg.chambers)}대`, ylabel: '억 원 / 년' });
+    // 수명 활용률 · 초과 사용
+    if (br) {
+      const w = .36, ut = cols.map(c => c[1].util), ov = cols.map(c => c[1].over_rate);
+      br.bar(X.map(x => x - w / 2), ut, { width: w, color: COL.accent, label: '수명 활용률 (%)' }).bar(X.map(x => x + w / 2), ov, { width: w, color: COL.bad, label: '수명 초과 링 비율 (%)' });
+      X.forEach(i => { br.text(i - w / 2, ut[i], fmt0(ut[i]), { anchor: 'middle', va: 'bottom', size: 11, dy: -2 }); br.text(i + w / 2, ov[i], fmt0(ov[i]), { anchor: 'middle', va: 'bottom', size: 11, dy: -2 }); });
+      br.set({ xticks: { vals: X, labels: cols.map(c => c[0]) }, gridX: false, xlim: [-.6, 3.6], ylim: [0, 128], legend: { loc: 'ul', ncol: 2, size: 10, bg: true }, title: '수명 활용률 · 초과 사용' });
+    }
+    return [top, bl, br];
+  });
+}
+
+/* ---------- 결과 저장 (CSV 보기 · 복사) */
+function csv(rows) { return rows.map(r => r.map(v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(',')).join('\n'); }
+function openSave() {
+  const f = S.fleet, keys = ['no', 'chamber', 'material', 'life_h', 'samples', 'live_err_h', 'model_version', 'sim_rf_h'];
+  $('csvRec').value = f.length ? csv([keys, ...f.map(r => keys.map(k => r[k]))]) : '아직 수명이 확정된 링이 없어요. 시뮬레이션을 시작하면 여기에 쌓여요.';
+  $('csvVer').value = S.pl ? csv([['version', 'rings', 'samples', 'val_mae_h', 'hit_100h', 'annual_saving_won'], ...S.pl.versions.map((v, i) => [v.no, v.n_rings, v.n_samples, v.mae.toFixed(1), v.hit.toFixed(3), S.vals[i] ? Math.round(S.vals[i].saving) : ''])]) : '모델 준비 중…';
+  $('saveModal').hidden = false; $('saveClose').focus();
+}
+
+/* ---------- 시작 화면 (포커스링이 돌며 이온이 떨어지는 애니메이션 + 준비 단계) */
+const SP = { val: 0, ang: 0, alive: true, rng: new RNG(1), ions: null, last: 0, t0: performance.now() };
+SP.ions = Array.from({ length: 26 }, () => [SP.rng.uniform(40, 330), SP.rng.uniform(-150, 0)]);
+const SP_STEPS = [[45, '물리 마모 모델 · 기관별 수명 데이터 생성'], [81, '물리 모델 사전학습 → RUL 모델 v0'], [101, '원주 팹 검증 링 준비 · v0 평가']];
+function spUpdate(val, text) {
+  if (val != null && val >= SP.val - 50) SP.val = val;
+  const k = SP_STEPS.findIndex(([hi]) => SP.val < hi);
+  $('spSteps').innerHTML = SP_STEPS.map(([, t], j) => `<div class="${j < k ? 'done' : j === k ? 'cur' : ''}">${j < k ? '✓' : j === k ? '●' : '○'}&nbsp; ${t}</div>`).join('');
+  $('spBar').style.width = `${SP.val}%`; if (text) $('spMsg').textContent = text;
+  $('bootBar').style.width = `${SP.val}%`; if (text) $('bootLbl').textContent = text;
+}
+function spFrame(now) {
+  if (!SP.alive) return;
+  requestAnimationFrame(spFrame);
+  if (now - SP.last < 55) return; SP.last = now;
+  const g = $('spCv').getContext('2d'), W = 698, H = 180, cx = 190, cy = 92, wear = SP.val / 100, rad = d => d * Math.PI / 180;
+  g.fillStyle = '#f1f5f9'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#e2e8f0'; g.lineWidth = 1; for (let x = 0; x < W; x += 28) { g.beginPath(); g.moveTo(x + .5, 0); g.lineTo(x + .5, H); g.stroke(); }
+  const ell = () => { g.beginPath(); g.ellipse(cx, cy, 150, 70, 0, 0, Math.PI * 2); };
+  g.fillStyle = '#e2e8f0'; ell(); g.fill();
+  g.lineWidth = 8; g.strokeStyle = COL.accent; ell(); g.stroke();
+  const arc = (s, e, c) => { g.strokeStyle = c; g.beginPath(); g.ellipse(cx, cy, 150, 70, 0, -rad(s), -rad(s + e), true); g.stroke(); };
+  arc(SP.ang, 55, COL.bad); arc(SP.ang + 180, 30, COL.warn);
+  g.fillStyle = '#fff'; g.strokeStyle = '#cbd5e1'; g.lineWidth = 2; g.beginPath(); g.ellipse(cx, cy, 122, 54, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+  g.strokeStyle = '#e2e8f0'; g.lineWidth = 1; for (let i = -3; i <= 3; i++) { g.beginPath(); g.moveTo(cx + i * 30, cy - 50 + Math.abs(i) * 3); g.lineTo(cx + i * 30, cy + 50 - Math.abs(i) * 3); g.stroke(); }
+  g.lineWidth = 2;
+  for (const ion of SP.ions) {
+    ion[1] += 7; if (ion[1] > 170) { ion[0] = SP.rng.uniform(40, 330); ion[1] = SP.rng.uniform(-60, 0); }
+    const edge = Math.abs(ion[0] - cx) > 110, dx = edge ? (ion[0] - cx) * .05 * wear : 0;
+    g.strokeStyle = edge && wear > .3 ? COL.bad : '#7c3aed'; g.beginPath(); g.moveTo(ion[0], ion[1]); g.lineTo(ion[0] + dx, ion[1] + 9); g.stroke();
+  }
+  const tx = 380, F = getComputedStyle(document.body).fontFamily;
+  g.fillStyle = COL.muted; g.font = `700 12px ${F}`; g.fillText('RING HEALTH', tx, 44);
+  g.fillStyle = '#e2e8f0'; g.fillRect(tx, 54, 280, 12); g.fillStyle = wear < .5 ? COL.good : COL.warn; g.fillRect(tx, 54, 280 * (1 - .7 * wear), 12);
+  g.fillStyle = COL.muted; g.font = `400 12px ${F}`; g.fillText('EROSION  →  SHEATH TILT  →  EDGE YIELD', tx, 96);
+  g.fillStyle = COL.accent; g.font = `700 21px ${F}`; g.fillText(`AI 준비 ${fix(SP.val, 1)} %`, tx, 128);
+  SP.ang = (SP.ang + 6) % 360;
+}
+
+/* ---------- 부팅: 물리 모델 사전학습(v0) → 원주 팹 검증 링 → v0 평가 */
+async function boot() {
+  spUpdate(3, '시작하는 중…'); requestAnimationFrame(spFrame);
+  try {
+    const lab = await new Lab().init((f, s) => spUpdate(3 + 77 * f, s));
+    const pl = await new Pipeline().init(lab, SPEC_ETCH, (f, s) => spUpdate(81 + 18 * f, s));
+    const wait = Math.max(0, 2500 - (performance.now() - SP.t0));
+    setTimeout(() => onReady(lab, pl), wait);
+  } catch (e) { console.error(e); spUpdate(0, '오류: ' + e); $('foot').textContent = '오류: ' + e; }
+}
+function onReady(lab, pl) {
+  S.lab = lab; S.pl = pl; S.testLife = mean(pl.test.map(d => d.life));
+  const v0 = pl.cur;
+  $('bootBar').style.width = '100%'; $('bootDot').style.background = COL.good;
+  $('bootLbl').textContent = `v0 배포 · 물리 모델 · 오차 ${fmt0(v0.mae)} h`; $('bootLbl').style.color = COL.good;
+  SP.alive = false; $('splash').classList.add('out'); setTimeout(() => { $('splash').hidden = true; }, 500);
+  $('simBtn').disabled = false; $('trBtn').disabled = false;
+  $('prRing').innerHTML = pl.test.map((d, i) => `<option value="${i}">#${i + 1}  ${MATERIALS[d.mat].label} · 수명 ${fmt0(d.life)} h</option>`).join('');
+  recomputeValues(); predictChambers();
+  ['collect', 'model', 'value'].forEach(k => S.dirty.add(k));
+  refreshPage(S.page); refreshFlowbar(); loraSync(true);   // 송신 보드가 먼저 연결돼 있으면 현재 상태(샘플 0)를 바로 알려줌
+  $('foot').textContent = '▶ 시뮬레이션 시작 → 원주 팹 링 수명 확정 → 학습 데이터 적재 → 자동 재학습 → 정확도 · 가치 갱신';
+  toast('v0 배포 · 물리 모델', `원주 데이터 0건 · 검증 오차 ${fmt0(v0.mae)} h · 시뮬레이션을 시작하세요`, COL.good);
+}
+
+/* ---------- 이벤트 연결 */
+function wire() {
+  buildCards();
+  $('cfg').innerHTML = CFG_FIELDS.map(([k, lab, v]) => `<label for="cfg-${k}">${lab}</label><input id="cfg-${k}" inputmode="decimal" value="${fmt0(v)}">`).join('');
+  CFG_FIELDS.forEach(([k]) => { const e = $('cfg-' + k); e.addEventListener('change', onValueCfg); e.addEventListener('keydown', ev => { if (ev.key === 'Enter') e.blur(); }); });
+  const slider = (id, f, onRelease) => { const e = $(id), o = $(id + 'O'); const up = () => { o.textContent = f(+e.value); }; e.addEventListener('input', up); if (onRelease) e.addEventListener('change', onRelease); up(); };
+  slider('trEvery', v => `${v}개`, refreshFlowbar); slider('trEpochs', v => `${v}`);
+  slider('vMargin', v => `${v} h`, onValueCfg); slider('vKs', v => `${fix(v, 2)}×`, onValueCfg);
+  $('truth').addEventListener('change', refreshCollect);
+  $('simBtn').addEventListener('click', toggleSim);
+  $('trBtn').addEventListener('click', startTrain);
+  $('prRing').addEventListener('change', refreshModel);
+  document.querySelectorAll('.tile').forEach(t => t.addEventListener('click', () => showPage(t.dataset.page)));
+  loraInit();
+  $('saveBtn').addEventListener('click', openSave);
+  $('saveClose').addEventListener('click', () => { $('saveModal').hidden = true; $('saveBtn').focus(); });
+  $('saveModal').addEventListener('click', e => { if (e.target === $('saveModal')) $('saveModal').hidden = true; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('saveModal').hidden) $('saveModal').hidden = true; });
+  document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => {
+    const ta = $(b.dataset.copy), done = () => { b.textContent = '복사됨'; setTimeout(() => { b.textContent = '복사'; }, 1400); };
+    try { navigator.clipboard.writeText(ta.value).then(done, () => { ta.focus(); ta.select(); }); } catch (e) { ta.focus(); ta.select(); }
+  }));
+  window.addEventListener('hashchange', () => showPage(location.hash.slice(1), true));
+  let rT = 0; const ro = new ResizeObserver(() => { cancelAnimationFrame(rT); rT = requestAnimationFrame(() => refreshPage(S.page)); });
+  ['figCollect', 'figModel', 'figValue'].forEach(id => ro.observe($(id)));
+  // 시계 · LIVE 표시
+  let on = false;
+  const pulse = () => {
+    on = !on; const d = new Date(), wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()], p2 = n => String(n).padStart(2, '0');
+    $('clk').textContent = `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+    $('clkd').textContent = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} (${wd})`;
+    if (S.running) { $('liveDot').style.background = on ? COL.bad : blend(COL.panel, COL.bad, .35); $('liveLbl').textContent = 'LIVE'; $('liveLbl').style.color = COL.bad; }
+    else { $('liveDot').style.background = COL.muted; $('liveLbl').textContent = 'PAUSED'; $('liveLbl').style.color = COL.muted; }
+    arrows();
+  };
+  pulse(); setInterval(pulse, 500);
+  log('시뮬레이션을 시작하면 수명 확정 · 재학습 이벤트가 여기에 기록됩니다.', 'info');
+  $('log').firstChild.querySelector('span').remove();
+  $('log').firstChild.style.color = COL.muted;
+  showPage(location.hash.slice(1) || 'collect', true);
+}
+wire();
+boot();
+
+</script>
+
+</body></html>
