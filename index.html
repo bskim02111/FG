@@ -1283,7 +1283,10 @@ function onLora(m) {
     const [, ok, fw] = m;
     LK.stage = ok ? 'ready' : 'fail';
     if (ok) log(`LoRa 송신 준비 완료 (${LK.name}) — 학습 샘플 ${fmt0(LK.threshold)}개 넘으면 자동 송신`, 'ai');
-    else log(`송신 아두이노(${LK.name})가 LoRa 모듈 응답을 못 받음 — 3.3V · TXD→D2 · RXD←D3(분압) 배선 확인`, 'urg');
+    else {
+      log(`USB(웹 ↔ 송신 아두이노) 연결은 정상, 그런데 송신 아두이노가 LoRa 모듈 응답을 못 받음 — 모듈 VDD-3.3V · GND · TXD→D2 · RXD←D3(분압) 배선 확인 (점검 코드: Check_module\\lora_check)`, 'urg');
+      toast('LoRa 모듈 응답 없음 (USB 연결은 정상)', '송신 아두이노 ↔ LoRa 모듈 배선 · 전원 확인 — lora_check 코드로 점검', COL.bad);
+    }
     if (fw < 2) {
       log('송신 보드 코드가 예전 버전 → 알림은 보내지만 예측 수명·오차율은 빠짐. 시뮬레이션을 끄고 lora_tx.ino 를 다시 업로드하세요', 'man');
       toast('송신 보드 코드가 예전 버전', '시뮬레이션을 끄고 lora_tx.ino 다시 업로드', COL.warn);
@@ -1384,7 +1387,7 @@ function loraRefresh() {
   } else if (!LK.port) {
     c = COL.muted; t = LK.probing ? 'LoRa 송신기 찾는 중…' : 'LoRa 송신기 미연결';
   } else if (LK.stage === 'init') { c = COL.warn; t = `LoRa ${port} · 모듈 설정 중…`; }
-  else if (LK.stage === 'fail') { c = COL.bad; t = `LoRa ${port} · 모듈 응답 없음`; }
+  else if (LK.stage === 'fail') { c = COL.bad; t = `LoRa ${port} · USB 연결됨 · LoRa 모듈 응답 없음 (배선 확인)`; }
   else if (LK.stage === 'sending') { c = COL.accent2; t = 'LoRa 송신 중 · 수신 확인 대기…'; }
   else if (LK.stage === 'acked') { c = COL.good; t = `LoRa 송신 ✓ 수신 확인 (${LK.rssi} dBm)`; }
   else if (LK.stage === 'noack') { c = COL.bad; t = 'LoRa 송신 · 수신 확인 없음'; }
