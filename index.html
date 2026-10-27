@@ -1083,6 +1083,15 @@ async function linkPick() {
   else if (r === 'none') toast('송신 보드 응답 없음', 'lora_tx.ino 가 올라간 보드인지 확인하고 다시 연결해 주세요', COL.warn);
 }
 
+/* 시뮬레이션 시작을 눌렀는데 송신 보드가 아직 연결 안 돼 있으면 → 그 클릭으로 바로 Chrome 포트 선택 창을 띄움 (페이지마다 한 번)
+   한 번 고른 포트는 Chrome이 기억해서 다음부터는 페이지를 열면 자동 연결 → 시뮬레이션 시작만 누르면 됨 */
+function loraOnStart() {
+  if (LK.mode !== 'serial' || LK.port || LK.probing || LK.askedOnStart) return;
+  LK.askedOnStart = true;
+  log('송신 아두이노가 아직 연결되지 않아 포트 선택 창을 띄움 — 송신 보드를 고르면 시뮬레이션 중에도 바로 연결됨', 'info');
+  linkPick();                                                        // 클릭 처리 안에서 바로 호출해야 Chrome이 선택 창을 허용함
+}
+
 /* ── 송신 보드 → PC (파이썬 _handle) */
 function linkHandle(line) {
   if (!line) return;
@@ -1551,7 +1560,7 @@ function simTick() {
 function toggleSim() {
   S.running = !S.running; S.started = true;
   $('simBtn').innerHTML = S.running ? '⏸&nbsp; 일시정지' : '▶&nbsp; 시뮬레이션 재개';
-  if (S.running) setTimeout(simTick, 10);
+  if (S.running) { setTimeout(simTick, 10); loraOnStart(); }   // 송신 보드가 아직 연결 안 돼 있으면 이 클릭으로 바로 포트 선택
   arrows();
 }
 
