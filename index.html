@@ -1063,7 +1063,7 @@ async function linkAuto() {
 /* 'USB 연결' — 처음 한 번 포트 고르기 */
 async function linkPick() {
   if (LK.mode === 'nosupport') { toast('USB 연결을 지원하지 않는 브라우저', '컴퓨터용 Chrome 또는 Edge에서 열어 주세요', COL.warn); return; }
-  if (LK.mode === 'blocked') { toast('이 화면에서는 USB를 쓸 수 없어요', '시뮬레이터 주소를 Chrome 새 탭에서 직접 열어 주세요', COL.warn); return; }
+  if (LK.mode === 'blocked') { toast('이 화면에서는 USB를 쓸 수 없어요', 'LoRa 송신은 Chrome에서 bskim02111.github.io/FG 로 열어 주세요', COL.warn); return; }
   if (LK.port || LK.probing) return;
   let port;
   try { port = await navigator.serial.requestPort(); }
