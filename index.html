@@ -990,6 +990,7 @@ const LK = {
   probing: false, rx: new WeakSet(),
   stage: 'search', rssi: null, crossed: false, sentN: null, sentT: 0, metrics: [0, 0, 0], nT: 0, crossT: null, warned: new Set(),
   fwBuild: '', cfg: null, readyT: 0, forced: false, retry: 0, link: null, linkRssi: null,   // v3: 보조 송신 · 자동 재송신 · 연결 점검
+  alertDone: false, gTries: 0, gAt: 0, testPending: false, testT: 0, lastTest: false,       // 1,000개 돌파 알림을 테스트 송신과 같은 경로(G)로 확실히 보냄
 };
 const FW_BUILD = 'FW3.1', LORA_CFG = ['6', '922000000', '9,7,1,12'];   // 송신 보드 코드 판번호 · 모듈 설정 (수신 보드와 같아야 함)
 const nowS = () => performance.now() / 1000;
@@ -1153,10 +1154,15 @@ function loraSync(force = false) {
     if (!LK.ready) log(`학습 샘플 ${fmt0(n)}개 ≥ ${fmt0(LK.threshold)} — 송신 아두이노가 연결되지 않아 LoRa 알림을 보내지 못함 `
       + '(상단 LoRa 표시의 \'USB 연결\'로 송신 보드 연결, 아두이노 IDE 시리얼 모니터가 포트를 잡고 있으면 닫기)', 'urg');
   }
-  // 보조 송신: 기준을 넘었는데 4초 안에 보드가 스스로 송신(SENT)하지 않으면 웹이 대신 송신 명령(G)을 보냄
-  // (보드가 상태 줄을 놓쳤거나 '이미 보냄' 상태로 남아 있어도 시연 중 알림이 반드시 나가게 함)
-  if (LK.crossT && LK.ready && LK.loraOk && !LK.forced && !['sending', 'acked', 'noack'].includes(LK.stage)
-      && now - Math.max(LK.crossT, LK.readyT) > 4.0) loraForce('보드가 자동 송신을 안 해서 웹이 대신 송신 요청');
+  // 1,000개를 넘는 순간: 최신 상태 줄 + 'G'(지금 알림 보내기)를 바로 보냄 — 테스트 송신(F)과 같은 경로라
+  // 보드가 상태 줄을 놓쳤거나, 앞서 테스트 송신을 했거나, 보드가 늦게 연결돼도 알림이 반드시 나감.
+  // 보드는 알림을 보내는 중(확인 대기)에는 G를 무시하므로 보드 스스로 보낸 알림과 겹쳐 두 번 가지 않음.
+  // 송신(SENT)이 5초 안에 안 보이면 두 번까지 다시 요청.
+  if (LK.testPending && now - LK.testT > 3) LK.testPending = false;   // 보드가 테스트 송신을 무시한 경우 (다른 알림 송신 중)
+  if (LK.crossed && LK.ready && LK.loraOk && !LK.alertDone && LK.gTries < 3 && (!LK.gTries || now - LK.gAt > 5)) {
+    LK.gTries++; LK.gAt = now;
+    loraForce(LK.gTries === 1 ? `학습 샘플 ${fmt0(n)}개 ≥ ${fmt0(LK.threshold)} → 송신 아두이노에 알림 송신 요청` : `알림 송신이 확인되지 않아 다시 요청 (${LK.gTries}번째)`);
+  }
   const got = LK.gotN == null ? '없음' : fmt0(LK.gotN);
   // 진단 ① 상태 줄을 보내는데 송신 보드의 확인(GOT)이 3.5초 넘게 없으면 경고 (V2 보드만 GOT를 보냄)
   const unanswered = LK.gotT == null || LK.gotT < LK.nT;
@@ -1164,8 +1170,8 @@ function loraSync(force = false) {
     LK.warned.add('got');
     log(`송신 보드가 시뮬레이션 상태를 못 받고 있음 (보낸 값 ${fmt0(LK.sentN)}, 보드 확인 ${got}) — USB 케이블을 다시 꽂거나 페이지를 새로 고침`, 'urg');
   }
-  // 진단 ② 기준을 넘었는데 (보조 송신 요청 뒤에도) 송신(SENT)이 없으면 경고
-  if (LK.crossT && LK.ready && now - Math.max(LK.crossT, LK.readyT) > 8.0 && !LK.warned.has('nosend') && !['sending', 'acked', 'noack'].includes(LK.stage)) {
+  // 진단 ② 기준을 넘었는데 (송신 요청을 세 번 보낸 뒤에도) 송신(SENT)이 없으면 경고
+  if (LK.crossT && LK.ready && LK.gTries >= 3 && now - LK.gAt > 5 && !LK.alertDone && !LK.warned.has('nosend')) {
     LK.warned.add('nosend');
     log(`학습 샘플이 ${fmt0(LK.threshold)}개를 넘었는데 송신 보드가 송신하지 않음 (보드 확인 값 ${got}) — 송신 보드에 최신 lora_tx.ino 가 올라갔는지 확인 후 '테스트 송신'으로 무선부터 점검`, 'urg');
     toast('송신 보드가 송신하지 않음', 'lora_tx.ino 다시 업로드 · 상단 \'테스트 송신\'으로 점검', COL.bad);
@@ -1180,7 +1186,7 @@ function loraForce(reason) {
     linkSendStatus(S.pl.nSamples(), S.pl.records.length, S.pl.cur.no, S.steps * DT, ...m);
     LK.metrics = m;
   }
-  if (linkSend('G')) log(`LoRa ${reason}`, 'man');
+  if (linkSend('G')) log(`LoRa ${reason}`, 'info');
 }
 /* USB를 쓸 수 없는 화면 — 기준 도달과 알림 내용만 표시 */
 function loraOffline(n) {
@@ -1213,7 +1219,7 @@ function onLora(m) {
     }
     linkSend('R');                                                   // 재무장: 지난 실행에서 '이미 보냄' 상태로 남아 있으면 다시 안 보내기 때문
     LK.sentN = null; LK.warned.delete('got');
-    Object.assign(LK, { readyT: nowS(), forced: false, retry: 0, link: null });
+    Object.assign(LK, { readyT: nowS(), forced: false, retry: 0, link: null, gTries: 0, gAt: 0, testPending: false });   // 보드가 새로 켜짐 → 아직 못 보낸 알림이면 다시 요청
     loraSync(true);                                                  // 아두이노가 리셋됐으니 현재 상태를 바로 다시 알려줌
   } else if (kind === 'disc') {
     LK.stage = 'search';
@@ -1222,6 +1228,12 @@ function onLora(m) {
     const [, seq, n, tries] = m;
     LK.stage = 'sending';
     if (tries === 1) {
+      LK.lastTest = LK.testPending; LK.testPending = false;
+      if (!LK.lastTest && LK.crossed) LK.alertDone = true;          // 1,000개 돌파 알림이 실제로 나감
+    }
+    if (tries === 1 && LK.lastTest) {
+      log(`LoRa 테스트 송신 #${seq} — 수신측으로 전송 (학습 샘플 ${fmt0(n)}개 시점 값)`, 'data');
+    } else if (tries === 1) {
       const [life, mae, err] = LK.metrics;
       if (LK.fw >= 2) {
         log(`LoRa 송신 #${seq} — 학습 샘플 ${fmt0(n)}개 ≥ ${fmt0(LK.threshold)} → 예측 수명 ${fmt0(life)} h · 오차율 ${fix(err, 1)} % (±${fmt0(mae)} h) 수신측으로 전송`, 'urg');
@@ -1238,7 +1250,7 @@ function onLora(m) {
     toast('LoRa 수신 확인 ✓', `수신측이 알림을 받았습니다 · RSSI ${rssi} dBm · SNR ${snr} dB`, COL.good);
   } else if (kind === 'noack') {
     LK.stage = 'noack';
-    if (LK.retry < 1 && LK.crossed) {                                // 시연 중 한 번은 자동으로 다시 보냄
+    if (LK.retry < 1 && LK.crossed && !LK.lastTest) {               // 1,000개 돌파 알림은 한 번 자동으로 다시 보냄
       LK.retry++;
       log(`LoRa #${m[1]} 수신 확인 없음 → 2초 뒤 자동으로 한 번 더 송신`, 'man');
       setTimeout(() => loraForce('자동 재송신'), 2000);
@@ -1306,7 +1318,7 @@ function loraRefresh() {
 
 /* ── 테스트 송신 (파이썬 lora_test: 시뮬레이션과 상관없이 지금 바로 알림 1회) */
 function loraTest() {
-  if (linkSend('F')) log('LoRa 테스트 송신 요청', 'info');
+  if (linkSend('F')) { LK.testPending = true; LK.testT = nowS(); log('LoRa 테스트 송신 요청', 'info'); }
   else if (LK.mode === 'serial') toast('송신 아두이노 미연결', '\'USB 연결\'을 눌러 lora_tx.ino 를 올린 보드를 고르세요', COL.warn);
   else linkPick();
 }
